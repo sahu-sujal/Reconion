@@ -1,7 +1,0 @@
-https://cleartax-media.s3.amazonaws.com/finfo/wg-utils/cms-tool/10afae9d-f0e0-41f5-a4fb-09f6b50ba6f3.pdf
-https://cleartax-media.s3.amazonaws.com/finfo/wg-utils/cms-tool/112965c8-45ca-4dc9-8f49-b4ac4cd77073.pdf
-https://cleartax-media.s3.amazonaws.com/finfo/wg-utils/cms-tool/5f79ee9d-40c5-469c-a93b-b0af2f97b447.pdf
-https://cleartax-media.s3.amazonaws.com/finfo/wg-utils/cms-tool/61b6d415-e3c2-4a62-8dbc-e6cc5b5047b1.pdf
-https://cleartax-media.s3.amazonaws.com/finfo/wg-utils/cms-tool/6be3641e-77bd-4d90-b91b-6499cb5c8815.pdf
-https://cleartax-media.s3.amazonaws.com/finfo/wg-utils/cms-tool/99a925c0-e5e6-4df3-a753-652c6e3cbe0b.pdf
-https://cleartax-media.s3.amazonaws.com/finfo/wg-utils/cms-tool/9c07bae8-4e57-4351-ab2d-4b3c27ce1092.pdf
