@@ -73,6 +73,16 @@ class HttpResponseRepository(BaseRepository[HttpResponse]):
         if not rows:
             return 0, 0
 
+        # Deduplicate by the conflict key (host_id, url): Postgres rejects an
+        # ON CONFLICT DO UPDATE that touches the same target row twice in one
+        # statement (CardinalityViolation). httpx can emit several records that
+        # map to the same (host_id, url) — e.g. probing multiple ports or
+        # following redirects — so keep the last occurrence (latest wins).
+        deduped: dict[tuple[Any, Any], dict[str, Any]] = {}
+        for row in rows:
+            deduped[(row["host_id"], row["url"])] = row
+        rows = list(deduped.values())
+
         # Chunk to stay under Postgres' 65535 bind-parameter limit
         # (13 params/row → ~5000 rows max; use 4000 for headroom).
         chunk_size = 4000

@@ -39,15 +39,20 @@ class HttpxRecord:
 class HttpxRunner(ToolBase):
     """Probe a list of hosts with httpx and return structured HTTP results."""
 
+    # Probed on every host in addition to the scheme defaults.
+    DEFAULT_PORTS = "80,443,8080,8000,8888"
+
     def __init__(
         self,
         timeout: int = 600,
-        threads: int = 100,
+        threads: int = 200,
         follow_redirects: bool = True,
+        ports: str = DEFAULT_PORTS,
     ) -> None:
         super().__init__(timeout=timeout)
         self._threads = threads
         self._follow_redirects = follow_redirects
+        self._ports = ports
 
     @property
     def tool_name(self) -> str:
@@ -151,6 +156,8 @@ class HttpxRunner(ToolBase):
                 "-timeout", "10",
                 "-retries", "1",
             ]
+            if self._ports:
+                cmd += ["-ports", self._ports]
             if self._follow_redirects:
                 cmd.append("-follow-redirects")
 

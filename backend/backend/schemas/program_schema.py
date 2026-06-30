@@ -67,6 +67,10 @@ class ProgramStatsResponse(BaseModel):
     live_hosts: int = 0
     total_dns_records: int = 0
     total_technologies: int = 0
+    total_urls: int = 0
+    new_urls: int = 0
+    total_js_files: int = 0
+    new_js_files: int = 0
     total_findings: int
     open_findings: int
     total_scan_runs: int

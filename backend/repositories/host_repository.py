@@ -98,11 +98,30 @@ class HostRepository(BaseRepository[Host]):
             placeholders = []
             flat: dict[str, Any] = {}
             for i, row in enumerate(chunk):
-                placeholders.append(
-                    f"(CAST(:id_{i} AS uuid), :scheme_{i}, :port_{i}, :ip_{i},"
-                    f" :status_code_{i}, :title_{i}, :content_length_{i},"
-                    f" :response_time_{i}, :cdn_{i}, :waf_{i}, :last_seen_{i})"
-                )
+                if i == 0:
+                    # Cast every column in the first VALUES row so Postgres infers
+                    # the correct column types for the derived table `v`, even when
+                    # a column is NULL for all rows in the chunk (otherwise NULLs
+                    # default to `text` and the UPDATE fails on typed columns).
+                    placeholders.append(
+                        f"(CAST(:id_{i} AS uuid),"
+                        f" CAST(:scheme_{i} AS varchar),"
+                        f" CAST(:port_{i} AS integer),"
+                        f" CAST(:ip_{i} AS varchar),"
+                        f" CAST(:status_code_{i} AS integer),"
+                        f" CAST(:title_{i} AS varchar),"
+                        f" CAST(:content_length_{i} AS integer),"
+                        f" CAST(:response_time_{i} AS double precision),"
+                        f" CAST(:cdn_{i} AS boolean),"
+                        f" CAST(:waf_{i} AS boolean),"
+                        f" CAST(:last_seen_{i} AS timestamptz))"
+                    )
+                else:
+                    placeholders.append(
+                        f"(CAST(:id_{i} AS uuid), :scheme_{i}, :port_{i}, :ip_{i},"
+                        f" :status_code_{i}, :title_{i}, :content_length_{i},"
+                        f" :response_time_{i}, :cdn_{i}, :waf_{i}, :last_seen_{i})"
+                    )
                 flat[f"id_{i}"] = str(row["id"])
                 flat[f"scheme_{i}"] = row.get("scheme")
                 flat[f"port_{i}"] = row.get("port")
@@ -138,6 +157,68 @@ class HostRepository(BaseRepository[Host]):
                 flat,
             )
         db.commit()
+
+    # ------------------------------------------------------------------
+    # Maintained content-discovery counters (Phase 5)
+    # ------------------------------------------------------------------
+
+    def bulk_increment_counts(
+        self,
+        db: Session,
+        url_deltas: dict[uuid.UUID, int],
+        js_deltas: dict[uuid.UUID, int],
+    ) -> None:
+        """Increment hosts.url_count / hosts.js_count by per-host deltas.
+
+        Counters are maintained at insertion time so the API never has to run
+        ``COUNT(*)`` per host. Applies a single ``UPDATE ... FROM (VALUES ...)``
+        per chunk. Only newly inserted URLs/JS files should contribute deltas.
+        """
+        host_ids = set(url_deltas) | set(js_deltas)
+        host_ids.discard(None)
+        if not host_ids:
+            return
+
+        rows = [
+            (hid, url_deltas.get(hid, 0), js_deltas.get(hid, 0))
+            for hid in host_ids
+        ]
+        chunk_size = 5000
+        for start in range(0, len(rows), chunk_size):
+            chunk = rows[start:start + chunk_size]
+            placeholders = []
+            flat: dict[str, Any] = {}
+            for i, (hid, ud, jd) in enumerate(chunk):
+                if i == 0:
+                    placeholders.append(
+                        f"(CAST(:id_{i} AS uuid), CAST(:u_{i} AS integer), CAST(:j_{i} AS integer))"
+                    )
+                else:
+                    placeholders.append(f"(:id_{i}, :u_{i}, :j_{i})")
+                flat[f"id_{i}"] = str(hid)
+                flat[f"u_{i}"] = int(ud)
+                flat[f"j_{i}"] = int(jd)
+            db.execute(
+                text(f"""
+                    UPDATE hosts AS h SET
+                        url_count = h.url_count + v.u,
+                        js_count  = h.js_count + v.j,
+                        updated_at = now()
+                    FROM (VALUES {", ".join(placeholders)}) AS v(id, u, j)
+                    WHERE h.id = v.id
+                """),
+                flat,
+            )
+        db.commit()
+
+    def map_hostnames_to_ids(
+        self, db: Session, scope_id: uuid.UUID
+    ) -> dict[str, uuid.UUID]:
+        """Return {hostname: host_id} for every host in the scope."""
+        rows = db.execute(
+            select(Host.host, Host.id).where(Host.scope_id == scope_id)
+        ).fetchall()
+        return {r.host: r.id for r in rows}
 
     # ------------------------------------------------------------------
     # Bulk upsert (ON CONFLICT scope_id, host)

@@ -96,7 +96,7 @@ class HttpScanWorker(BaseWorker):
                 "-ip -server -tech-detect -cdn -response-time",
             )
             try:
-                runner = HttpxRunner(timeout=900, threads=100)
+                runner = HttpxRunner(timeout=900, threads=200)
                 http_records: list[HttpxRecord] = runner.probe(hosts)
                 metrics.httpx_live = len(http_records)
 
@@ -155,6 +155,16 @@ class HttpScanWorker(BaseWorker):
                 scope_target=scope.target,
                 metrics=metrics,
             )
+
+            # ---- Step 8: Chain content discovery ----------------------- #
+            if metrics.httpx_live > 0:
+                try:
+                    self._chain_content_discovery(db, program.id, scope.id)
+                except Exception as chain_exc:
+                    self.logger.warning(
+                        "Failed to chain content discovery after HTTP scan %s: %s",
+                        scan_run_id, chain_exc,
+                    )
 
         except Exception as exc:
             self.logger.exception("HTTP scan %s failed: %s", scan_run_id, exc)
@@ -334,6 +344,27 @@ class HttpScanWorker(BaseWorker):
         program = self.program_service.get_program(db=db, program_id=scan_run.program_id)
         scope = self.scope_service.get_scope(db=db, scope_id=scan_run.scope_id)
         return scan_run, program, scope
+
+    def _chain_content_discovery(self, db, program_id: uuid.UUID, scope_id: uuid.UUID) -> None:
+        """Create a CONTENT_DISCOVERY ScanRun and enqueue run_url_scan."""
+        from backend.services.scan_run_service import ScanRunService
+        from database.models.enums import ScanStatus, ScanType
+
+        svc = ScanRunService()
+        url_scan = svc.create_scan_run(
+            db=db,
+            program_id=program_id,
+            scope_id=scope_id,
+            scan_type=ScanType.CONTENT_DISCOVERY.value,
+            worker_name="url_worker",
+            status=ScanStatus.PENDING.value,
+        )
+        celery_app.send_task(
+            "workers.url.url_worker.run_url_scan",
+            args=[str(url_scan.id)],
+            countdown=2,
+        )
+        self.logger.info("Chained content discovery scan %s for scope %s", url_scan.id, scope_id)
 
     def _create_tool_execution(self, db, scan_run_id: uuid.UUID, tool_name: str, command: str):
         return self.tool_execution_repo.create(

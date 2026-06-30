@@ -17,6 +17,7 @@ from backend.api.health_routes import router as health_router
 from backend.api.program_routes import router as program_router
 from backend.api.scope_routes import router as scope_router
 from backend.api.scan_routes import router as scan_router
+from backend.api.stats_routes import router as stats_router
 from backend.exceptions import APIError, EntityNotFoundError
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -84,6 +85,7 @@ app.add_middleware(
 )
 
 app.include_router(health_router)
+app.include_router(stats_router)
 app.include_router(program_router)
 app.include_router(scope_router)
 app.include_router(scan_router)

@@ -21,6 +21,8 @@ class HostResponse(BaseModel):
     response_time: float | None = None
     cdn: bool = False
     waf: bool = False
+    url_count: int = 0
+    js_count: int = 0
     first_seen: datetime | None = None
     last_seen: datetime | None = None
     created_at: datetime

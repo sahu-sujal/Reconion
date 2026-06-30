@@ -58,6 +58,13 @@ class Host(Base, UUIDMixin, TimestampMixin):
     waf: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false", index=True,
     )
+    # Phase 5 — maintained counters (never COUNT()-ed per request)
+    url_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    js_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     first_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

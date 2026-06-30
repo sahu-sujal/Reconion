@@ -35,6 +35,10 @@ class ScanService:
             "workers.http.http_worker.run_http_scan",
             "http_worker",
         ),
+        ScanType.CONTENT_DISCOVERY.value: (
+            "workers.url.url_worker.run_url_scan",
+            "url_worker",
+        ),
     }
 
     def start_scan(
@@ -150,6 +154,15 @@ class ScanService:
             httpx_count=getattr(scan_run, "httpx_count", 0) or 0,
             live_count=getattr(scan_run, "live_count", 0) or 0,
             new_live_count=getattr(scan_run, "new_live_count", 0) or 0,
+            # Content discovery counters
+            gau_count=getattr(scan_run, "gau_count", 0) or 0,
+            waybackurls_count=getattr(scan_run, "waybackurls_count", 0) or 0,
+            katana_count=getattr(scan_run, "katana_count", 0) or 0,
+            hakrawler_count=getattr(scan_run, "hakrawler_count", 0) or 0,
+            total_urls_count=getattr(scan_run, "total_urls_count", 0) or 0,
+            new_urls_count=getattr(scan_run, "new_urls_count", 0) or 0,
+            total_js_count=getattr(scan_run, "total_js_count", 0) or 0,
+            new_js_count=getattr(scan_run, "new_js_count", 0) or 0,
             error_message=scan_run.error_message,
             started_at=scan_run.started_at,
             finished_at=scan_run.finished_at,

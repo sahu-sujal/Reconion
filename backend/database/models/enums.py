@@ -51,8 +51,18 @@ class ScanType(str, enum.Enum):
     PORT = "PORT"
     URL = "URL"
     JS = "JS"
+    CONTENT_DISCOVERY = "CONTENT_DISCOVERY"
     TECHNOLOGY = "TECHNOLOGY"
     SCREENSHOT = "SCREENSHOT"
+
+
+class UrlSource(str, enum.Enum):
+    """Tools that contribute discovered URLs / JS files (Phase 5)."""
+
+    GAU = "GAU"
+    WAYBACKURLS = "WAYBACKURLS"
+    KATANA = "KATANA"
+    HAKRAWLER = "HAKRAWLER"
 
 
 class ScanStatus(str, enum.Enum):

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend.exceptions import EntityNotFoundError
 from database.models.dns_record import DnsRecord
 from database.models.host import Host
+from database.models.js_file import JsFile
 from database.models.program import Program
 from database.models.scope import Scope
 from database.models.asset import Asset
@@ -20,7 +21,8 @@ from database.models.notification import Notification
 from database.models.scan_run import ScanRun
 from database.models.subdomain import Subdomain
 from database.models.technology import Technology
-from database.models.enums import FindingStatus
+from database.models.url import URL
+from database.models.enums import FindingStatus, ScanType
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +135,28 @@ class ProgramService:
             select(func.count()).select_from(Technology).where(Technology.program_id == program_id)
         )
 
+        # Content discovery (Phase 5) — totals are the true row counts (URLs for
+        # out-of-scope/third-party hosts have host_id=NULL and would be missed by
+        # SUM(hosts.url_count), so we count the tables directly). "new" comes from
+        # the most recent content discovery scan run.
+        total_urls = db.scalar(
+            select(func.count()).select_from(URL).where(URL.program_id == program_id)
+        )
+        total_js = db.scalar(
+            select(func.count()).select_from(JsFile).where(JsFile.program_id == program_id)
+        )
+        latest_cd = db.scalar(
+            select(ScanRun)
+            .where(
+                ScanRun.program_id == program_id,
+                ScanRun.scan_type == ScanType.CONTENT_DISCOVERY.value,
+            )
+            .order_by(ScanRun.started_at.desc())
+            .limit(1)
+        )
+        new_urls = int(getattr(latest_cd, "new_urls_count", 0) or 0) if latest_cd else 0
+        new_js = int(getattr(latest_cd, "new_js_count", 0) or 0) if latest_cd else 0
+
         return {
             "program_id": program_id,
             "total_scopes": int(total_scopes or 0),
@@ -143,6 +167,10 @@ class ProgramService:
             "live_hosts": int(live_hosts or 0),
             "total_dns_records": int(total_dns_records or 0),
             "total_technologies": int(total_technologies or 0),
+            "total_urls": int(total_urls or 0),
+            "new_urls": new_urls,
+            "total_js_files": int(total_js or 0),
+            "new_js_files": new_js,
             "total_findings": int(total_findings or 0),
             "open_findings": int(open_findings or 0),
             "total_scan_runs": int(total_scan_runs or 0),

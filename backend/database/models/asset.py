@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from database.models.scope import Scope
     from database.models.subdomain import Subdomain
     from database.models.host import Host
-    from database.models.url import URL
 
 
 class Asset(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
@@ -72,12 +71,6 @@ class Asset(Base, UUIDMixin, TimestampMixin, SoftDeleteMixin):
     )
     hosts: Mapped[list["Host"]] = relationship(
         "Host",
-        back_populates="asset",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-    urls: Mapped[list["URL"]] = relationship(
-        "URL",
         back_populates="asset",
         cascade="all, delete-orphan",
         passive_deletes=True,

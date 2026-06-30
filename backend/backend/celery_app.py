@@ -12,6 +12,7 @@ celery_app = Celery(
         "workers.subdomain.subdomain_worker",
         "workers.dns.dns_worker",
         "workers.http.http_worker",
+        "workers.url.url_worker",
         "workers.notification.discord_worker",
         "workers.scheduler.scan_scheduler",
     ],

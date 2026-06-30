@@ -353,6 +353,76 @@ def send_http_scan_notification(
 
 
 # ------------------------------------------------------------------ #
+# Content discovery scan-complete notification (Phase 5)                #
+# ------------------------------------------------------------------ #
+
+def send_content_discovery_notification(
+    webhook_url: str | None,
+    program_name: str,
+    scope_target: str,
+    metrics,              # ContentDiscoveryMetrics dataclass — avoid circular import
+    duration_seconds: float,
+) -> bool:
+    """Send a structured Discord embed for a completed content discovery scan.
+
+    Never raises.
+    """
+    resolved_url = webhook_url or _get_webhook_url()
+    if not resolved_url:
+        logger.warning("Discord webhook URL not configured — content discovery notification skipped")
+        return False
+
+    has_new = metrics.new_urls > 0 or metrics.new_js > 0
+    color = 0x00FF7F if has_new else 0x5865F2
+
+    mins, secs = divmod(int(duration_seconds), 60)
+    duration_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+
+    tool_block = "\n".join([
+        "```",
+        f"GAU           {metrics.gau_count:>9}",
+        f"Waybackurls   {metrics.waybackurls_count:>9}",
+        f"Katana        {metrics.katana_count:>9}",
+        f"Hakrawler     {metrics.hakrawler_count:>9}",
+        "─────────────────────────",
+        f"Total URLs    {metrics.total_urls:>9}",
+        f"New URLs      {metrics.new_urls:>9}",
+        f"Total JS      {metrics.total_js:>9}",
+        f"New JS        {metrics.new_js:>9}",
+        "```",
+    ])
+
+    embed = {
+        "title": "\U0001f4e1 Content Discovery Complete",
+        "description": "\n".join([
+            f"**Program:** {program_name}",
+            f"**Scope:** `{scope_target}`",
+            "",
+            f"**New URLs:** {metrics.new_urls:,}",
+            f"**New JS Files:** {metrics.new_js:,}",
+            f"**Duration:** {duration_str}",
+            "",
+            "**Tool breakdown (raw URLs):**",
+            tool_block,
+        ]),
+        "color": color,
+    }
+    payload = {"embeds": [embed]}
+
+    try:
+        _send_webhook(resolved_url, json.dumps(payload).encode("utf-8"))
+        logger.info("Discord content discovery notification sent: %s/%s", program_name, scope_target)
+        return True
+    except HTTPError as exc:
+        logger.warning("Discord webhook HTTP error %s %s", exc.code, exc.reason)
+    except URLError as exc:
+        logger.warning("Discord webhook URL error: %s", exc.reason)
+    except Exception as exc:
+        logger.warning("Discord content discovery notification failed: %s", exc)
+    return False
+
+
+# ------------------------------------------------------------------ #
 # Celery async wrapper (kept for backward compat)                       #
 # ------------------------------------------------------------------ #
 

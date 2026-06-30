@@ -90,6 +90,15 @@ class ScanReportResponse(BaseModel):
     httpx_count: int = 0
     live_count: int = 0
     new_live_count: int = 0
+    # Content discovery counters
+    gau_count: int = 0
+    waybackurls_count: int = 0
+    katana_count: int = 0
+    hakrawler_count: int = 0
+    total_urls_count: int = 0
+    new_urls_count: int = 0
+    total_js_count: int = 0
+    new_js_count: int = 0
     records_found: int = 0
     error_message: str | None = None
     started_at: datetime

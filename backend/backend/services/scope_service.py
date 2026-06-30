@@ -8,12 +8,15 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from backend.exceptions import EntityNotFoundError
-from database.models.enums import ScopeType
+from database.models.enums import ScanType, ScopeType
 from database.models.program import Program
 from database.models.scope import Scope
 from database.models.asset import Asset
 from database.models.finding import Finding
+from database.models.js_file import JsFile
 from database.models.notification import Notification
+from database.models.scan_run import ScanRun
+from database.models.url import URL
 
 logger = logging.getLogger(__name__)
 
@@ -131,11 +134,36 @@ class ScopeService:
             select(func.max(Notification.sent_at)).where(Notification.scope_id == scope_id)
         )
 
+        # Content discovery (Phase 5) totals are true row counts — URLs for
+        # out-of-scope hosts have host_id=NULL and would be missed by
+        # SUM(hosts.url_count).
+        urls_count = db.scalar(
+            select(func.count()).select_from(URL).where(URL.scope_id == scope_id)
+        )
+        js_count = db.scalar(
+            select(func.count()).select_from(JsFile).where(JsFile.scope_id == scope_id)
+        )
+        latest_cd = db.scalar(
+            select(ScanRun)
+            .where(
+                ScanRun.scope_id == scope_id,
+                ScanRun.scan_type == ScanType.CONTENT_DISCOVERY.value,
+            )
+            .order_by(ScanRun.started_at.desc())
+            .limit(1)
+        )
+        new_urls = int(getattr(latest_cd, "new_urls_count", 0) or 0) if latest_cd else 0
+        new_js = int(getattr(latest_cd, "new_js_count", 0) or 0) if latest_cd else 0
+
         return {
             "scope_id": scope.id,
             "assets_count": int(assets_count or 0),
             "findings_count": int(findings_count or 0),
             "notifications_sent": int(notifications_sent or 0),
+            "urls_count": int(urls_count or 0),
+            "new_urls": new_urls,
+            "js_count": int(js_count or 0),
+            "new_js": new_js,
             "last_scan_at": scope.last_scan_at,
             "last_notification_at": last_notification_at,
         }

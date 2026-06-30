@@ -23,7 +23,8 @@ class ScanRun(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "scan_runs"
     __table_args__ = (
         CheckConstraint(
-            "scan_type IN ('SUBDOMAIN', 'DNS', 'HTTP', 'PORT', 'URL', 'JS', 'TECHNOLOGY', 'SCREENSHOT')",
+            "scan_type IN ('SUBDOMAIN', 'DNS', 'HTTP', 'PORT', 'URL', 'JS', "
+            "'CONTENT_DISCOVERY', 'TECHNOLOGY', 'SCREENSHOT')",
             name="ck_scan_runs_scan_type",
         ),
     )
@@ -76,6 +77,15 @@ class ScanRun(Base, UUIDMixin, TimestampMixin):
     httpx_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     live_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     new_live_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # Content discovery (Phase 5) metrics
+    gau_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    waybackurls_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    katana_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    hakrawler_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    total_urls_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    new_urls_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    total_js_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    new_js_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

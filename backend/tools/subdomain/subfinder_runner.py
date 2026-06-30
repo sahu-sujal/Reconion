@@ -19,7 +19,7 @@ class SubfinderRunner(ToolBase):
         with tempfile.NamedTemporaryFile(prefix="subfinder_", suffix=".txt") as tmp:
             path = Path(tmp.name)
             result = run_command_to_file(
-                ["subfinder", "-d", target, "-all", "-silent"],
+                ["subfinder", "-d", target, "-all", "-recursive", "-silent"],
                 timeout=self.timeout,
                 stdout_path=path,
             )

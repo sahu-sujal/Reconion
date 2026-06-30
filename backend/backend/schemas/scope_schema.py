@@ -68,6 +68,10 @@ class ScopeStatsResponse(BaseModel):
     assets_count: int
     findings_count: int
     notifications_sent: int
+    urls_count: int = 0
+    new_urls: int = 0
+    js_count: int = 0
+    new_js: int = 0
     last_scan_at: datetime | None = None
     last_notification_at: datetime | None = None
 
