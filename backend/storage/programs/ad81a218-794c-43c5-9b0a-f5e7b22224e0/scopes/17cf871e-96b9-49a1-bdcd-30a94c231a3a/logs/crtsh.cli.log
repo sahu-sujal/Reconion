@@ -1,0 +1,29 @@
+# ======================================================================
+# command : crtsh -d clear.in
+# when    : 2026-06-29T17:25:47.995221+00:00
+# status  : OK  (13.1s)
+# ======================================================================
+
+----- STDERR -----
+(none)
+
+----- STDOUT -----
+payments.clear.in
+webinars.clear.in
+www.forms-1.clear.in
+clear.in
+files.clear.in
+forms-1.clear.in
+blog.clear.in
+forms-sandbox-1.clear.in
+www.yesbank-payments.clear.in
+www.api-sandbox.clear.in
+sni-validation.clear.in
+yesbank-payments.clear.in
+www.clear.in
+www.forms-sandbox-1.clear.in
+api-sandbox.clear.in
+itservicedesk.clear.in
+api.clear.in
+www.payments.clear.in
+www.api.clear.in

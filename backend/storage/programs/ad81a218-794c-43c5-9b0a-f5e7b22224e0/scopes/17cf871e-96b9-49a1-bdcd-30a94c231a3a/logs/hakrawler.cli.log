@@ -1,0 +1,11 @@
+# ======================================================================
+# command : /home/sujal-sahu/go/bin/hakrawler -d 2 -t 10 -u -json
+# when    : 2026-06-29T17:26:44.874144+00:00
+# status  : OK  (8.1s)
+# ======================================================================
+
+----- STDERR -----
+(none)
+
+----- STDOUT -----
+(streamed to /home/sujal-sahu/Desktop/Recon Automation/recon-platform/storage/programs/ad81a218-794c-43c5-9b0a-f5e7b22224e0/scopes/17cf871e-96b9-49a1-bdcd-30a94c231a3a/logs/hakrawler.json)

@@ -1,0 +1,582 @@
+# ======================================================================
+# command : /usr/bin/knockpy -d clear.in --recon --json
+# when    : 2026-06-29T17:25:41.833152+00:00
+# status  : OK  (6.9s)
+# ======================================================================
+
+----- STDERR -----
+(none)
+
+----- STDOUT -----
+[
+  {
+    "domain": "app-sandbox.clear.in",
+    "ip": [
+      "18.67.195.82",
+      "18.67.195.55",
+      "18.67.195.95",
+      "18.67.195.113",
+      "2600:9000:2638:9200:1e:3ed4:3d80:93a1",
+      "2600:9000:2638:ca00:1e:3ed4:3d80:93a1",
+      "2600:9000:2638:d000:1e:3ed4:3d80:93a1",
+      "2600:9000:2638:b600:1e:3ed4:3d80:93a1",
+      "2600:9000:2638:da00:1e:3ed4:3d80:93a1",
+      "2600:9000:2638:2e00:1e:3ed4:3d80:93a1",
+      "2600:9000:2638:7200:1e:3ed4:3d80:93a1",
+      "2600:9000:2638:9e00:1e:3ed4:3d80:93a1"
+    ],
+    "http": [
+      301,
+      "https://app-sandbox.clear.in/",
+      "CloudFront",
+      167,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> <hr><center>CloudFront</center> </body> </html>",
+      null
+    ],
+    "https": [
+      200,
+      null,
+      "AmazonS3",
+      11214,
+      null,
+      "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self';script-src 'self' data: 'unsafe-eval' 'unsafe-inline' https://www.google-analytics.com https://www.googletagmanager.com/ http://www.googletagmanager.com/ https://www.goog",
+      null
+    ],
+    "cert": [
+      true,
+      "2026-11-20",
+      "*.clear.in",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "invoicing.clear.in",
+    "ip": [
+      "13.225.5.109",
+      "13.225.5.41",
+      "13.225.5.64",
+      "13.225.5.69"
+    ],
+    "http": [
+      301,
+      "https://invoicing.clear.in/",
+      "CloudFront",
+      167,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> <hr><center>CloudFront</center> </body> </html>",
+      null
+    ],
+    "https": [
+      301,
+      "https://app.clear.in/clear-invoicing",
+      "AmazonS3",
+      0,
+      null,
+      null,
+      null
+    ],
+    "cert": [
+      true,
+      "2026-11-20",
+      "*.clear.in",
+      [
+        "TLS 1.0",
+        "TLS 1.1",
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "clear.in",
+    "ip": [
+      "108.158.46.92",
+      "108.158.46.24",
+      "108.158.46.93",
+      "108.158.46.8"
+    ],
+    "http": [
+      301,
+      "https://clear.in/",
+      "CloudFront",
+      167,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> <hr><center>CloudFront</center> </body> </html>",
+      null
+    ],
+    "https": [
+      301,
+      "https://www.clear.in/",
+      null,
+      17,
+      null,
+      "Moved Permanently",
+      null
+    ],
+    "cert": [
+      true,
+      "2026-11-20",
+      "*.clear.in",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ],
+    "scan_notes": [
+      "AXFR on root domain: failed (3 NS checked)."
+    ],
+    "axfr": {
+      "domain": "clear.in",
+      "status": "failed",
+      "checks": [
+        {
+          "ns": "ns-1133.awsdns-13.org",
+          "status": "failed",
+          "record_count": null,
+          "error": "ValueError: "
+        },
+        {
+          "ns": "ns-15.awsdns-01.com",
+          "status": "failed",
+          "record_count": null,
+          "error": "ValueError: "
+        },
+        {
+          "ns": "ns-1800.awsdns-33.co.uk",
+          "status": "failed",
+          "record_count": null,
+          "error": "ValueError: "
+        }
+      ]
+    }
+  },
+  {
+    "domain": "invoicing-sandbox.clear.in",
+    "ip": [
+      "108.159.80.69",
+      "108.159.80.61",
+      "108.159.80.34",
+      "108.159.80.66"
+    ],
+    "http": [
+      301,
+      "https://invoicing-sandbox.clear.in/",
+      "CloudFront",
+      167,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> <hr><center>CloudFront</center> </body> </html>",
+      null
+    ],
+    "https": [
+      301,
+      "https://app-sandbox.clear.in/clear-invoicing",
+      "AmazonS3",
+      0,
+      null,
+      null,
+      null
+    ],
+    "cert": [
+      true,
+      "2026-11-20",
+      "*.clear.in",
+      [
+        "TLS 1.0",
+        "TLS 1.1",
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "app.clear.in",
+    "ip": [
+      "18.67.195.48",
+      "18.67.195.86",
+      "18.67.195.36",
+      "18.67.195.42"
+    ],
+    "http": [
+      301,
+      "https://app.clear.in/",
+      "CloudFront",
+      167,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> <hr><center>CloudFront</center> </body> </html>",
+      null
+    ],
+    "https": [
+      200,
+      null,
+      "AmazonS3",
+      12767,
+      null,
+      "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self';script-src 'self' data: 'unsafe-eval' 'unsafe-inline' https://www.google-analytics.com https://www.googletagmanager.com/ http://www.googletagmanager.com/ https://cdn.what",
+      null
+    ],
+    "cert": [
+      true,
+      "2026-11-20",
+      "*.clear.in",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "api-sandbox.clear.in",
+    "ip": [
+      "99.83.130.139",
+      "75.2.104.91"
+    ],
+    "http": [
+      301,
+      "https://api-sandbox.clear.in:443/",
+      "awselb/2.0",
+      134,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> </body> </html>",
+      null
+    ],
+    "https": [
+      404,
+      null,
+      null,
+      19,
+      null,
+      "404 page not found",
+      null
+    ],
+    "cert": [
+      true,
+      "2027-02-24",
+      "*.clear.in",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "irp-sandbox.clear.in",
+    "ip": [
+      "108.159.80.73",
+      "108.159.80.129",
+      "108.159.80.84",
+      "108.159.80.20",
+      "2600:9000:238c:4600:4:b53c:8340:93a1",
+      "2600:9000:238c:5e00:4:b53c:8340:93a1",
+      "2600:9000:238c:f600:4:b53c:8340:93a1",
+      "2600:9000:238c:3600:4:b53c:8340:93a1",
+      "2600:9000:238c:ec00:4:b53c:8340:93a1",
+      "2600:9000:238c:7800:4:b53c:8340:93a1",
+      "2600:9000:238c:d400:4:b53c:8340:93a1",
+      "2600:9000:238c:c400:4:b53c:8340:93a1"
+    ],
+    "http": [
+      301,
+      "https://irp-sandbox.clear.in/",
+      "CloudFront",
+      167,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> <hr><center>CloudFront</center> </body> </html>",
+      null
+    ],
+    "https": [
+      200,
+      null,
+      "AmazonS3",
+      5454,
+      null,
+      "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><meta name=\"theme-color\" content=\"#000000\"/><title>Clear IRP: GSTN Approved e-Invoice Registration Portal</title><meta name=\"author\" content=\"ClearTax\"/><meta name=\"copyright\" content=\"Defmacro Software Pvt. Ltd. Copyright (c) 2021\"/><meta ",
+      null
+    ],
+    "cert": [
+      true,
+      "2026-11-24",
+      "*.clear.in",
+      [
+        "TLS 1.0",
+        "TLS 1.1",
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "www.clear.in",
+    "ip": [
+      "108.158.46.24",
+      "108.158.46.92",
+      "108.158.46.8",
+      "108.158.46.93"
+    ],
+    "http": [
+      301,
+      "https://www.clear.in/",
+      "CloudFront",
+      167,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> <hr><center>CloudFront</center> </body> </html>",
+      null
+    ],
+    "https": [
+      200,
+      null,
+      "nginx",
+      167254,
+      null,
+      "<!DOCTYPE html><html lang=\"en\"><head><meta charSet=\"UTF-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/><link rel=\"apple-touch-icon\" href=\"https://assets1.cleartax-cdn.com/cleartax/images/1677836432_clear_favicon_32x32.png\"/><link rel=\"icon\" type=\"image/png\" sizes=\"32x32\" hre",
+      null
+    ],
+    "cert": [
+      true,
+      "2026-11-20",
+      "*.clear.in",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "itservicedesk.clear.in",
+    "ip": [
+      "169.148.148.126"
+    ],
+    "http": [
+      301,
+      "https://itservicedesk.clear.in/",
+      "ZGS",
+      134,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> </body> </html>",
+      null
+    ],
+    "https": [
+      302,
+      "https://itservicedesk.clear.in/jsp/index.jsp",
+      "ZGS",
+      0,
+      null,
+      null,
+      null
+    ],
+    "cert": [
+      true,
+      "2026-09-22",
+      "askhr.tatacommunications.com",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "one.clear.in",
+    "ip": [
+      "18.67.195.23",
+      "18.67.195.65",
+      "18.67.195.50",
+      "18.67.195.19"
+    ],
+    "http": [
+      301,
+      "https://one.clear.in/",
+      "CloudFront",
+      167,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> <hr><center>CloudFront</center> </body> </html>",
+      null
+    ],
+    "https": [
+      200,
+      null,
+      "AmazonS3",
+      3350,
+      null,
+      "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"/><link rel=\"icon\" href=\"/favicon.svg\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/><meta name=\"theme-color\" content=\"#454ADE\"/><meta name=\"description\" content=\"ClearOne for Invoicing, Billing, Estimates and Challan\"/",
+      null
+    ],
+    "cert": [
+      true,
+      "2026-11-20",
+      "*.clear.in",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "forms-1.clear.in",
+    "ip": [
+      "104.211.186.97"
+    ],
+    "http": [
+      301,
+      "https://forms-1.clear.in/",
+      null,
+      136,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> </body> </html>",
+      null
+    ],
+    "https": [
+      200,
+      null,
+      null,
+      21428,
+      null,
+      "<!DOCTYPE html><html lang=\"en\"><head><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\"> <meta charset=\"UTF-8\"> <base href=\"/\"> <title>GO</title> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1\"> <link rel=\"icon\" id=\"customfavicon\" type=\"image/",
+      null
+    ],
+    "cert": [
+      true,
+      "2026-11-08",
+      "forms-1.clear.in",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "files.clear.in",
+    "ip": [
+      "66.33.60.34",
+      "76.76.21.164"
+    ],
+    "http": [
+      308,
+      "https://files.clear.in/",
+      "Vercel",
+      14,
+      null,
+      "Redirecting...",
+      null
+    ],
+    "https": [
+      308,
+      "https://www.cleartax.com",
+      "Vercel",
+      24,
+      null,
+      "https://www.cleartax.com",
+      null
+    ],
+    "cert": [
+      true,
+      "2026-08-08",
+      "files.clear.in",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "forms-sandbox-1.clear.in",
+    "ip": [
+      "4.224.58.166"
+    ],
+    "http": [
+      301,
+      "https://forms-sandbox-1.clear.in/",
+      null,
+      136,
+      null,
+      "<html> <head><title>301 Moved Permanently</title></head> <body> <center><h1>301 Moved Permanently</h1></center> </body> </html>",
+      null
+    ],
+    "https": [
+      200,
+      null,
+      null,
+      21428,
+      null,
+      "<!DOCTYPE html><html lang=\"en\"><head><link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin=\"\"> <meta charset=\"UTF-8\"> <base href=\"/\"> <title>GO</title> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1\"> <link rel=\"icon\" id=\"customfavicon\" type=\"image/",
+      null
+    ],
+    "cert": [
+      false,
+      "2025-10-03",
+      "forms-sandbox-1.clear.in",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "assets.clear.in",
+    "ip": [
+      "108.158.61.39",
+      "108.158.61.106",
+      "108.158.61.89",
+      "108.158.61.69"
+    ],
+    "http": [
+      403,
+      null,
+      "AmazonS3",
+      263,
+      null,
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?> <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>P5PCY2A3Y4BJ6XB9</RequestId><HostId>VZbqV/mDv61tX2Eugp5s8xGStSpiOcePfV2j6r/VwcpDpeY7i9ziC12KWWiyLxN1bmz4A6gXq8En9JLGYRL94vRQkJxcuVPe</HostId></Error>",
+      null
+    ],
+    "https": [
+      403,
+      null,
+      "AmazonS3",
+      263,
+      null,
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?> <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>DSR6PE12HWSZ0WDJ</RequestId><HostId>sw2u/ZhFDD3McmvKzn29MRGiJv+sA/2/R05fKWIpBSsrYrZEqcthXLNDQPeWs4zQpkXQlsdrTG8ChClczk+w6iMrYoHyk3XW</HostId></Error>",
+      null
+    ],
+    "cert": [
+      true,
+      "2026-09-24",
+      "*.cleartax-cdn.com",
+      [
+        "TLS 1.2",
+        "TLS 1.3"
+      ]
+    ]
+  },
+  {
+    "domain": "soc.clear.in",
+    "ip": [
+      "43.205.51.217"
+    ],
+    "http": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "ConnectTimeout"
+    ],
+    "https": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "ConnectTimeout"
+    ],
+    "cert": [
+      null,
+      null,
+      null,
+      null
+    ]
+  }
+]

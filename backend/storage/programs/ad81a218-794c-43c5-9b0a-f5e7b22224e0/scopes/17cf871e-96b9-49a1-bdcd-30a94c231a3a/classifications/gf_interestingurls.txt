@@ -1,0 +1,4 @@
+https://app.clear.in/max-itc/itc/Dashboard
+https://cleartax.in/save/dashboard/portfolio?ref=static-login-dropdown
+https://forms-1.clear.in/api/v3/accountAggregator/consent-request-plus
+https://forms-sandbox-1.clear.in/api/v3/accountAggregator/consent-request-plus
