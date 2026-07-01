@@ -69,6 +69,8 @@ class ScanRunService:
         records_found: int | None = None,
         error_message: str | None = None,
         finished_at: datetime | None = None,
+        resume_state: dict | None = None,
+        clear_resume_state: bool = False,
     ) -> ScanRun:
         scan_run = self.get_scan_run(db, scan_run_id)
         updates = {}
@@ -80,6 +82,11 @@ class ScanRunService:
             updates["error_message"] = error_message
         if finished_at is not None:
             updates["finished_at"] = finished_at
+        # resume_state: set a checkpoint, or explicitly clear it on resume/finish.
+        if clear_resume_state:
+            updates["resume_state"] = None
+        elif resume_state is not None:
+            updates["resume_state"] = resume_state
         return self.repo.update(db, scan_run, **updates)
 
     def get_latest_scan_by_scope(self, db: Session, scope_id: uuid.UUID) -> ScanRun | None:

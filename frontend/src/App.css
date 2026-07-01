@@ -1753,3 +1753,34 @@
   border-style: dashed;
   color: var(--text-faint);
 }
+
+/* ---- Endpoint Explorer (Phase 6.1) ---- */
+.table-scroll {
+  overflow-x: auto;
+  width: 100%;
+}
+.data-table th.sortable {
+  user-select: none;
+}
+.data-table th.sortable:hover {
+  color: var(--text-h);
+}
+.endpoint-count-link {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.endpoint-count-link:hover {
+  text-decoration: underline;
+}
+
+/* ---- Scan control: stop button (pause/resume reuse btn / btn-primary) ---- */
+.btn-warning {
+  color: var(--warning);
+  border-color: transparent;
+  background: transparent;
+}
+.btn-warning:hover {
+  background: var(--warning-bg);
+}

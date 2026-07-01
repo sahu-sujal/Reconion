@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-# Prepend ~/go/bin so Go-installed tools (chaos, subfinder, etc.) are always
-# resolvable regardless of how the Celery worker or uvicorn process was launched.
-_GO_BIN = str(Path.home() / "go" / "bin")
-if _GO_BIN not in os.environ.get("PATH", ""):
-    os.environ["PATH"] = _GO_BIN + os.pathsep + os.environ.get("PATH", "")
+from tools.common.tool_paths import ensure_tools_on_path
+
+# Prepend the repo-bundled tools/bin (then ~/go/bin) so every recon binary
+# (subfinder, dnsx, httpx, gau, katana, jsluice, …) resolves from the checked-in
+# copy first, regardless of how the Celery worker or uvicorn process was
+# launched. Centralised in tool_paths so every wrapper shares one source of
+# truth for tool locations.
+ensure_tools_on_path()
 
 
 @dataclass

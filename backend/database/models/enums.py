@@ -52,6 +52,7 @@ class ScanType(str, enum.Enum):
     URL = "URL"
     JS = "JS"
     CONTENT_DISCOVERY = "CONTENT_DISCOVERY"
+    JS_ENDPOINT = "JS_ENDPOINT"
     TECHNOLOGY = "TECHNOLOGY"
     SCREENSHOT = "SCREENSHOT"
 
@@ -63,11 +64,39 @@ class UrlSource(str, enum.Enum):
     WAYBACKURLS = "WAYBACKURLS"
     KATANA = "KATANA"
     HAKRAWLER = "HAKRAWLER"
+    SUBJS = "SUBJS"
+
+
+class EndpointTool(str, enum.Enum):
+    """JavaScript endpoint-extraction tools (Phase 6.1).
+
+    New extractors (JSLUICE, MANTRA, AST_PARSER, …) can be appended here and
+    wired into the worker without any schema change — ``discovery_tools`` is a
+    free-form JSON array of these labels.
+    """
+
+    LINKFINDER = "LINKFINDER"
+    XNLINKFINDER = "XNLINKFINDER"
+    JSLUICE = "JSLUICE"
+
+
+class DiscoverySource(str, enum.Enum):
+    """How an endpoint entered the inventory (Phase 6.1).
+
+    Only ``JS_DISCOVERY`` is produced today; the remaining values are reserved
+    so later phases can attribute endpoints to their origin without a migration.
+    """
+
+    JS_DISCOVERY = "JS_DISCOVERY"
+    URL_DISCOVERY = "URL_DISCOVERY"
+    API_DISCOVERY = "API_DISCOVERY"
+    MANUAL = "MANUAL"
 
 
 class ScanStatus(str, enum.Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
+    PAUSED = "PAUSED"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"

@@ -14,7 +14,14 @@ export const scansApi = {
   start: (payload) => api.post('/scans/start', payload),
   report: (id) => api.get(`/scans/${id}/report`),
   remove: (id) => api.del(`/scans/${id}`),
+  // Scan control (pause / resume / stop).
+  pause: (id) => api.post(`/scans/${id}/pause`),
+  resume: (id) => api.post(`/scans/${id}/resume`),
+  stop: (id) => api.post(`/scans/${id}/stop`),
 }
 
 // Scan run statuses (mirrors database/models/enums.py ScanStatus).
 export const ACTIVE_SCAN_STATUSES = ['PENDING', 'RUNNING']
+// A scan is controllable (pausable/stoppable) while active; resumable when paused.
+export const PAUSABLE_SCAN_STATUSES = ['PENDING', 'RUNNING']
+export const RESUMABLE_SCAN_STATUSES = ['PAUSED']

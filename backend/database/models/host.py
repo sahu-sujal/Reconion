@@ -65,6 +65,10 @@ class Host(Base, UUIDMixin, TimestampMixin):
     js_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # Phase 6.1 — maintained endpoint counter (never COUNT()-ed per request)
+    endpoint_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     first_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

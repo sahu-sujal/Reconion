@@ -76,6 +76,17 @@ class DnsScanWorker(BaseWorker):
         try:
             scan_run_uuid = uuid.UUID(scan_run_id)
             scan_run, program, scope = self._load_scan_data(db, scan_run_uuid)
+
+            # Resume path: a scan paused before chaining only needs to chain HTTP.
+            resume = scan_run.resume_state or {}
+            if resume.get("pending_chain") == "HTTP":
+                self.mark_completed(scan_run_id, records_found=scan_run.records_found or 0)
+                self.scan_run_service.update_scan_run(
+                    db=db, scan_run_id=scan_run_id, clear_resume_state=True,
+                )
+                self._chain_http_scan(db, program.id, scope.id)
+                return
+
             self.mark_running(scan_run_id)
 
             # Ensure UUID-based storage directories exist
@@ -161,6 +172,15 @@ class DnsScanWorker(BaseWorker):
 
             # ---- Step 8: Chain HTTP scan ------------------------------- #
             if metrics.dnsx_resolved > 0:
+                signal = self.check_control(scan_run_id)
+                if signal == "STOP":
+                    self.logger.info("Scan %s stopped before chaining HTTP", scan_run_id)
+                    self.mark_cancelled(scan_run_id)
+                    return
+                if signal == "PAUSE":
+                    self.logger.info("Scan %s paused before chaining HTTP", scan_run_id)
+                    self.mark_paused(scan_run_id, resume_state={"pending_chain": "HTTP"})
+                    return
                 try:
                     self._chain_http_scan(db, program.id, scope.id)
                 except Exception as chain_exc:

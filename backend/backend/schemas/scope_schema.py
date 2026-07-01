@@ -72,6 +72,8 @@ class ScopeStatsResponse(BaseModel):
     new_urls: int = 0
     js_count: int = 0
     new_js: int = 0
+    endpoints_count: int = 0
+    new_endpoints: int = 0
     last_scan_at: datetime | None = None
     last_notification_at: datetime | None = None
 

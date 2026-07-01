@@ -72,3 +72,11 @@ Thumbs.db
 # ---------------------------------------------------------------------------
 !.env
 !**/.env
+
+# ---------------------------------------------------------------------------
+# Recon tool binaries (Phase: bundled tools/) — large, platform-specific Go/Rust
+# binaries copied from PATH into tools/bin. Kept local-only; each dev provides
+# their own via backend/tools/common/command_runner.py PATH resolution.
+# The Python tool sources (LinkFinder, xnLinkFinder, SecretFinder) ARE tracked.
+# ---------------------------------------------------------------------------
+tools/bin/

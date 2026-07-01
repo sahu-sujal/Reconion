@@ -79,6 +79,52 @@ class JsFileRepository(BaseRepository[JsFile]):
         return JsFile.url.op("~")(f"^https?://([^/@]+\\.)?{d}(:[0-9]+)?(/|$)")
 
     # ------------------------------------------------------------------
+    # Streaming iteration (Phase 6.1 — constant memory over 200k+ JS files)
+    # ------------------------------------------------------------------
+
+    def iter_scope_js(
+        self,
+        db: Session,
+        scope_id: uuid.UUID,
+        batch_size: int = 500,
+        after_id: uuid.UUID | None = None,
+    ):
+        """Yield ``(id, url, host_id)`` tuples for the scope's JS files in batches.
+
+        Uses **keyset pagination** (``WHERE id > :after ORDER BY id LIMIT n``)
+        rather than a server-side ``yield_per`` cursor. This keeps memory flat
+        *and* survives the ``db.commit()`` the worker issues per batch — a
+        streaming cursor is invalidated by an intervening commit
+        ("named cursor isn't valid anymore"), keyset pagination is not.
+
+        Pass ``after_id`` (the last processed JS id) to resume mid-way.
+        """
+        last_id = after_id
+        while True:
+            stmt = select(JsFile.id, JsFile.url, JsFile.host_id).where(
+                JsFile.scope_id == scope_id
+            )
+            if last_id is not None:
+                stmt = stmt.where(JsFile.id > last_id)
+            stmt = stmt.order_by(JsFile.id).limit(batch_size)
+
+            rows = db.execute(stmt).all()
+            if not rows:
+                return
+            for row in rows:
+                yield row.id, row.url, row.host_id
+            last_id = rows[-1].id
+            if len(rows) < batch_size:
+                return
+
+    def count_scope_js(self, db: Session, scope_id: uuid.UUID) -> int:
+        return int(
+            db.scalar(
+                select(func.count()).select_from(JsFile).where(JsFile.scope_id == scope_id)
+            ) or 0
+        )
+
+    # ------------------------------------------------------------------
     # Bulk upsert (ON CONFLICT scope_id, url)
     # ------------------------------------------------------------------
 
@@ -93,6 +139,10 @@ class JsFileRepository(BaseRepository[JsFile]):
         db: Session,
         rows: list[dict[str, Any]],
     ) -> tuple[list[dict], list[dict]]:
+        if not rows:
+            return [], []
+        # Scope guard: drop out-of-scope JS files (host derived from the URL).
+        rows = self.enforce_scope(db, rows, url_key="url")
         if not rows:
             return [], []
         deduped: dict[tuple[Any, Any], dict[str, Any]] = {}

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint, text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -52,6 +52,10 @@ class Subdomain(Base, UUIDMixin, TimestampMixin):
     subdomain: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     # source kept for backward-compat display; subdomain_sources is the authoritative table
     source: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Phase 6.1 — maintained endpoint counter (never COUNT()-ed per request)
+    endpoint_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     first_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

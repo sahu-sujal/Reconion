@@ -384,6 +384,7 @@ def send_content_discovery_notification(
         f"Waybackurls   {metrics.waybackurls_count:>9}",
         f"Katana        {metrics.katana_count:>9}",
         f"Hakrawler     {metrics.hakrawler_count:>9}",
+        f"Subjs         {getattr(metrics, 'subjs_count', 0):>9}",
         "─────────────────────────",
         f"Total URLs    {metrics.total_urls:>9}",
         f"New URLs      {metrics.new_urls:>9}",
@@ -419,6 +420,76 @@ def send_content_discovery_notification(
         logger.warning("Discord webhook URL error: %s", exc.reason)
     except Exception as exc:
         logger.warning("Discord content discovery notification failed: %s", exc)
+    return False
+
+
+# ------------------------------------------------------------------ #
+# JavaScript endpoint discovery notification (Phase 6.1)                #
+# ------------------------------------------------------------------ #
+
+def send_js_endpoint_notification(
+    webhook_url: str | None,
+    program_name: str,
+    scope_target: str,
+    metrics,              # EndpointMetrics dataclass — avoid circular import
+    duration_seconds: float,
+) -> bool:
+    """Send a structured Discord embed for a completed JS endpoint scan.
+
+    Never raises.
+    """
+    resolved_url = webhook_url or _get_webhook_url()
+    if not resolved_url:
+        logger.warning("Discord webhook URL not configured — JS endpoint notification skipped")
+        return False
+
+    has_new = metrics.new_endpoints > 0
+    color = 0x00FF7F if has_new else 0x5865F2
+
+    mins, secs = divmod(int(duration_seconds), 60)
+    duration_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+
+    tool_block = "\n".join([
+        "```",
+        f"LinkFinder    {metrics.linkfinder_count:>9}",
+        f"XNLinkFinder  {metrics.xnlinkfinder_count:>9}",
+        f"JSluice       {metrics.jsluice_count:>9}",
+        "─────────────────────────",
+        f"JS processed  {metrics.js_processed:>9}",
+        f"JS failed     {metrics.js_failed:>9}",
+        f"Total EPs     {metrics.total_endpoints:>9}",
+        f"New EPs       {metrics.new_endpoints:>9}",
+        "```",
+    ])
+
+    embed = {
+        "title": "\U0001f680 JavaScript Endpoint Discovery Completed",
+        "description": "\n".join([
+            f"**Program:** {program_name}",
+            f"**Scope:** `{scope_target}`",
+            "",
+            f"**JS Files Processed:** {metrics.js_processed:,}",
+            f"**New Endpoints:** {metrics.new_endpoints:,}",
+            f"**Total Endpoints:** {metrics.total_endpoints:,}",
+            f"**Duration:** {duration_str}",
+            "",
+            "**Tool breakdown (raw endpoints):**",
+            tool_block,
+        ]),
+        "color": color,
+    }
+    payload = {"embeds": [embed]}
+
+    try:
+        _send_webhook(resolved_url, json.dumps(payload).encode("utf-8"))
+        logger.info("Discord JS endpoint notification sent: %s/%s", program_name, scope_target)
+        return True
+    except HTTPError as exc:
+        logger.warning("Discord webhook HTTP error %s %s", exc.code, exc.reason)
+    except URLError as exc:
+        logger.warning("Discord webhook URL error: %s", exc.reason)
+    except Exception as exc:
+        logger.warning("Discord JS endpoint notification failed: %s", exc)
     return False
 
 

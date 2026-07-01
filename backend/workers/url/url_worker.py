@@ -43,11 +43,13 @@ from repositories.host_repository import HostRepository
 from repositories.js_file_repository import JsFileRepository
 from repositories.tool_execution_repository import ToolExecutionRepository
 from repositories.url_repository import URLRepository
+from tools.common.scope_filter import is_host_in_scope
 from tools.common.url_utils import is_js_url, parse_url
 from tools.url.gau_runner import GauRunner
 from tools.url.hakrawler_runner import HakrawlerRunner
 from tools.url.katana_runner import KatanaRunner
 from tools.url.waybackurls_runner import WaybackurlsRunner
+from tools.javascript.subjs import SubjsRunner
 from workers.base.base_worker import BaseWorker
 
 DB_BATCH_SIZE = 10_000
@@ -57,6 +59,7 @@ SRC_GAU = "GAU"
 SRC_WAYBACKURLS = "WAYBACKURLS"
 SRC_KATANA = "KATANA"
 SRC_HAKRAWLER = "HAKRAWLER"
+SRC_SUBJS = "SUBJS"
 
 # Temporarily disabled — waybackurls consistently times out at 1800s and
 # contributes 0 URLs. Flip back to True (or set ENABLE_WAYBACKURLS=1 in the
@@ -70,6 +73,7 @@ class ContentDiscoveryMetrics:
     waybackurls_count: int = 0
     katana_count: int = 0
     hakrawler_count: int = 0
+    subjs_count: int = 0
     merged_raw: int = 0
     total_urls: int = 0      # unique normalized URLs upserted this run
     new_urls: int = 0
@@ -102,7 +106,23 @@ class UrlScanWorker(BaseWorker):
         try:
             scan_run_uuid = uuid.UUID(scan_run_id)
             scan_run, program, scope = self._load_scan_data(db, scan_run_uuid)
+
+            # Resume path: paused before chaining → just chain JS endpoint discovery.
+            resume = scan_run.resume_state or {}
+            if resume.get("pending_chain") == "JS_ENDPOINT":
+                self.mark_completed(scan_run_id, records_found=scan_run.records_found or 0)
+                self.scan_run_service.update_scan_run(
+                    db=db, scan_run_id=scan_run_id, clear_resume_state=True,
+                )
+                self._chain_js_endpoint_scan(db, program.id, scope.id)
+                return
+
             self.mark_running(scan_run_id)
+
+            # Scope target used to reject out-of-scope URLs/JS at merge time —
+            # in bug bounty, out-of-scope assets can't be reported, so they are
+            # never stored.
+            self._scope_target = scope.target
 
             self.storage_service.init_scope_directories_by_id(program.id, scope.id)
             urls_raw = self.storage_service.get_raw_path_by_id(program.id, scope.id, "urls")
@@ -163,6 +183,26 @@ class UrlScanWorker(BaseWorker):
             # ---- Step 8: Metrics ---------------------------------------- #
             self._update_scan_metrics(db, scan_run.id, metrics)
             self.mark_completed(scan_run_id, records_found=metrics.total_urls)
+
+            # ---- Chain: JS endpoint discovery (Phase 6.1) --------------- #
+            # Only chain when we actually discovered JS files to process.
+            if metrics.total_js > 0:
+                signal = self.check_control(scan_run_id)
+                if signal == "STOP":
+                    self.logger.info("Scan %s stopped before chaining JS endpoints", scan_run_id)
+                    self.mark_cancelled(scan_run_id)
+                    return
+                if signal == "PAUSE":
+                    self.logger.info("Scan %s paused before chaining JS endpoints", scan_run_id)
+                    self.mark_paused(scan_run_id, resume_state={"pending_chain": "JS_ENDPOINT"})
+                    return
+                try:
+                    self._chain_js_endpoint_scan(db, program.id, scope.id)
+                except Exception as chain_exc:
+                    self.logger.warning(
+                        "Failed to chain JS endpoint scan after content discovery %s: %s",
+                        scan_run_id, chain_exc,
+                    )
 
             self.logger.info(
                 "Content discovery %s done — urls=%d (new=%d) js=%d (new=%d)",
@@ -243,6 +283,18 @@ class UrlScanWorker(BaseWorker):
             )
             return SRC_HAKRAWLER, raw, urls
 
+        def _subjs() -> tuple[str, int, set[str]]:
+            # subjs is JS-only: it fetches live hosts and returns JS file URLs.
+            # Raw output is streamed to the scope's js/ artifact tree.
+            out = js_raw / "subjs.json"
+            raw = SubjsRunner(timeout=1800, concurrency=20).run_to_file(live_urls, out)
+            js_urls = _read_lines(out)
+            self.logger.info(
+                "Tool=SUBJS hosts=%d js_found=%d status=SUCCESS",
+                len(live_urls), len(js_urls),
+            )
+            return SRC_SUBJS, raw, js_urls
+
         tasks = {}
         if hostnames:
             tasks[SRC_GAU] = _gau
@@ -251,6 +303,7 @@ class UrlScanWorker(BaseWorker):
         if live_urls:
             tasks[SRC_KATANA] = _katana
             tasks[SRC_HAKRAWLER] = _hakrawler
+            tasks[SRC_SUBJS] = _subjs
 
         exec_recs = {
             label: self._create_tool_execution(db, scan_run_id, label.lower(), f"{label.lower()} <hosts>")
@@ -258,7 +311,7 @@ class UrlScanWorker(BaseWorker):
         }
 
         results: dict[str, tuple[int, set[str]]] = {}
-        with ThreadPoolExecutor(max_workers=4) as pool:
+        with ThreadPoolExecutor(max_workers=5) as pool:
             future_map = {pool.submit(fn): label for label, fn in tasks.items()}
             for future in as_completed(future_map):
                 label = future_map[future]
@@ -286,30 +339,42 @@ class UrlScanWorker(BaseWorker):
                 metrics.katana_count = raw_count
             elif label == SRC_HAKRAWLER:
                 metrics.hakrawler_count = raw_count
+            elif label == SRC_SUBJS:
+                metrics.subjs_count = raw_count
             metrics.merged_raw += len(urls)
-            self._merge(urls, label, url_sources, js_sources)
+            # subjs output is always JS files — force JS classification so URLs
+            # like "…/script?v=2" are still recorded as JS.
+            self._merge(urls, label, url_sources, js_sources, force_js=(label == SRC_SUBJS))
 
-    @staticmethod
     def _merge(
+        self,
         raw_urls: set[str],
         label: str,
         url_sources: dict[str, set[str]],
         js_sources: dict[str, set[str]],
+        force_js: bool = False,
     ) -> None:
-        """Normalize + deduplicate one tool's URLs into the shared source maps."""
+        """Normalize + deduplicate one tool's URLs into the shared source maps.
+
+        Out-of-scope URLs/JS (any host not under the scope root domain) are
+        dropped here so they never reach the DB. ``force_js`` marks every input
+        as a JS file — used for JS-only discovery tools (subjs) whose output may
+        not always end in ``.js`` (e.g. ``/script?v=2``).
+        """
+        scope_target = getattr(self, "_scope_target", None)
         for raw in raw_urls:
-            if is_js_url(raw):
-                parsed = parse_url(raw)
-                if parsed is None:
-                    continue
+            parsed = parse_url(raw)
+            if parsed is None:
+                continue
+            # Scope gate: skip anything whose host isn't in scope.
+            if scope_target and not is_host_in_scope(parsed.host, scope_target):
+                continue
+            if force_js or is_js_url(raw):
                 js_sources.setdefault(parsed.normalized, set()).add(label)
                 # A JS file is also a URL — record it in both tables.
                 url_sources.setdefault(parsed.normalized, set()).add(label)
             else:
-                normalized = parse_url(raw)
-                if normalized is None:
-                    continue
-                url_sources.setdefault(normalized.normalized, set()).add(label)
+                url_sources.setdefault(parsed.normalized, set()).add(label)
 
     # ------------------------------------------------------------------
     # Persistence
@@ -493,6 +558,27 @@ class UrlScanWorker(BaseWorker):
         scope = self.scope_service.get_scope(db=db, scope_id=scan_run.scope_id)
         return scan_run, program, scope
 
+    def _chain_js_endpoint_scan(self, db, program_id: uuid.UUID, scope_id: uuid.UUID) -> None:
+        """Create a JS_ENDPOINT ScanRun and enqueue run_js_endpoint_scan (Phase 6.1)."""
+        from backend.services.scan_run_service import ScanRunService
+        from database.models.enums import ScanStatus, ScanType
+
+        svc = ScanRunService()
+        ep_scan = svc.create_scan_run(
+            db=db,
+            program_id=program_id,
+            scope_id=scope_id,
+            scan_type=ScanType.JS_ENDPOINT.value,
+            worker_name="js_endpoint_worker",
+            status=ScanStatus.PENDING.value,
+        )
+        celery_app.send_task(
+            "workers.js_endpoint_worker.run_js_endpoint_scan",
+            args=[str(ep_scan.id)],
+            countdown=2,
+        )
+        self.logger.info("Chained JS endpoint scan %s for scope %s", ep_scan.id, scope_id)
+
     def _create_tool_execution(self, db, scan_run_id: uuid.UUID, tool_name: str, command: str):
         return self.tool_execution_repo.create(
             db,
@@ -527,6 +613,7 @@ class UrlScanWorker(BaseWorker):
                 waybackurls_count=metrics.waybackurls_count,
                 katana_count=metrics.katana_count,
                 hakrawler_count=metrics.hakrawler_count,
+                subjs_count=metrics.subjs_count,
                 total_urls_count=metrics.total_urls,
                 new_urls_count=metrics.new_urls,
                 total_js_count=metrics.total_js,

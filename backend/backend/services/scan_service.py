@@ -4,7 +4,15 @@ import uuid
 
 from backend.celery_app import celery_app
 from backend.exceptions import EntityNotFoundError, ScanLockedError
-from backend.queues.redis_client import acquire_scope_lock, is_scope_locked, release_scope_lock
+from backend.queues.redis_client import (
+    CONTROL_PAUSE,
+    CONTROL_STOP,
+    acquire_scope_lock,
+    clear_scan_control,
+    is_scope_locked,
+    release_scope_lock,
+    set_scan_control,
+)
 from backend.services.program_service import ProgramService
 from backend.services.scope_service import ScopeService
 from backend.services.scan_run_service import ScanRunService
@@ -38,6 +46,10 @@ class ScanService:
         ScanType.CONTENT_DISCOVERY.value: (
             "workers.url.url_worker.run_url_scan",
             "url_worker",
+        ),
+        ScanType.JS_ENDPOINT.value: (
+            "workers.js_endpoint_worker.run_js_endpoint_scan",
+            "js_endpoint_worker",
         ),
     }
 
@@ -87,6 +99,86 @@ class ScanService:
             release_scope_lock(scope_id)
             raise
 
+    # ------------------------------------------------------------------
+    # Scan control: pause / resume / stop
+    # ------------------------------------------------------------------
+
+    def pause_scan(self, db, scan_run_id: uuid.UUID):
+        """Request a running scan to pause at its next safe boundary.
+
+        Writes a PAUSE control signal the worker polls between tools/phases/
+        batches. The worker persists a resume checkpoint and sets status PAUSED.
+        Only PENDING/RUNNING scans can be paused.
+        """
+        scan_run = self.scan_run_service.get_scan_run(db=db, scan_run_id=scan_run_id)
+        if scan_run.status not in (ScanStatus.PENDING.value, ScanStatus.RUNNING.value):
+            raise ValueError(
+                f"Cannot pause a scan in '{scan_run.status}' state — only running scans."
+            )
+        set_scan_control(scan_run_id, CONTROL_PAUSE)
+        scan_run.target = scan_run.scope.target if scan_run.scope else None
+        return scan_run
+
+    def resume_scan(self, db, scan_run_id: uuid.UUID):
+        """Resume a PAUSED scan from its stored checkpoint.
+
+        Re-dispatches the same worker task with the paused scan's id; the worker
+        reads ``resume_state`` and continues from where it left off. Re-acquires
+        the scope lock (raises if the scope is busy with another scan).
+        """
+        scan_run = self.scan_run_service.get_scan_run(db=db, scan_run_id=scan_run_id)
+        if scan_run.status != ScanStatus.PAUSED.value:
+            raise ValueError(
+                f"Cannot resume a scan in '{scan_run.status}' state — only PAUSED scans."
+            )
+        if scan_run.scan_type not in self._SCAN_TASK_MAP:
+            raise ValueError(f"Cannot resume scan_type '{scan_run.scan_type}'.")
+
+        if not acquire_scope_lock(scan_run.scope_id):
+            raise ScanLockedError(str(scan_run.scope_id))
+
+        try:
+            clear_scan_control(scan_run_id)  # drop any stale signal
+            self.scan_run_service.update_scan_run(
+                db=db, scan_run_id=scan_run_id, status=ScanStatus.PENDING.value,
+            )
+            task_name, _ = self._SCAN_TASK_MAP[scan_run.scan_type]
+            celery_app.send_task(task_name, args=[str(scan_run_id)], countdown=1)
+        except Exception:
+            release_scope_lock(scan_run.scope_id)
+            raise
+
+        db.refresh(scan_run)
+        scan_run.target = scan_run.scope.target if scan_run.scope else None
+        return scan_run
+
+    def stop_scan(self, db, scan_run_id: uuid.UUID):
+        """Stop (cancel) a running or paused scan.
+
+        For a RUNNING scan, writes a STOP control signal — the worker aborts at
+        its next boundary, releases the lock and marks CANCELLED. For a PAUSED
+        scan (no worker running), we cancel directly and free the lock. A
+        CANCELLED scan can then be deleted.
+        """
+        scan_run = self.scan_run_service.get_scan_run(db=db, scan_run_id=scan_run_id)
+        if scan_run.status == ScanStatus.PAUSED.value:
+            # No worker is running — cancel in place and release the lock.
+            clear_scan_control(scan_run_id)
+            release_scope_lock(scan_run.scope_id)
+            self.scan_run_service.update_scan_run(
+                db=db, scan_run_id=scan_run_id,
+                status=ScanStatus.CANCELLED.value, clear_resume_state=True,
+            )
+        elif scan_run.status in (ScanStatus.PENDING.value, ScanStatus.RUNNING.value):
+            set_scan_control(scan_run_id, CONTROL_STOP)
+        else:
+            raise ValueError(
+                f"Cannot stop a scan in '{scan_run.status}' state — it is not active."
+            )
+        db.refresh(scan_run)
+        scan_run.target = scan_run.scope.target if scan_run.scope else None
+        return scan_run
+
     def get_scan_run(self, db, scan_run_id: uuid.UUID):
         scan_run = self.scan_run_service.get_scan_run(db=db, scan_run_id=scan_run_id)
         scan_run.target = scan_run.scope.target if scan_run.scope else None
@@ -103,8 +195,13 @@ class ScanService:
         if scan_run.status in (ScanStatus.PENDING.value, ScanStatus.RUNNING.value):
             raise ValueError(
                 f"Cannot delete a scan in '{scan_run.status}' state. "
-                "Only COMPLETED, FAILED, or CANCELLED scans can be deleted."
+                "Stop it first, then delete."
             )
+        # A PAUSED scan holds the scope lock and may have a control signal —
+        # free both before removing the row so the scope isn't left locked.
+        if scan_run.status == ScanStatus.PAUSED.value:
+            clear_scan_control(scan_run_id)
+            release_scope_lock(scan_run.scope_id)
         self.scan_run_service.repo.delete(db, scan_run)
 
     def get_subdomains_for_scan(

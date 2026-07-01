@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { GlobeIcon, RadarIcon, PulseIcon } from './icons'
+import { GlobeIcon, RadarIcon, PulseIcon, SearchIcon } from './icons'
 
-// The pipeline runs sequentially: SUBDOMAIN → DNS → HTTP. Each stage chains the
-// next on the backend, so picking an earlier stage runs everything after it too.
+// The pipeline runs sequentially: SUBDOMAIN → DNS → HTTP → CONTENT_DISCOVERY →
+// JS_ENDPOINT. Each stage chains the next on the backend, so picking an earlier
+// stage runs everything after it too.
 const STAGES = [
   {
     type: 'SUBDOMAIN',
@@ -28,9 +29,16 @@ const STAGES = [
   {
     type: 'CONTENT_DISCOVERY',
     label: 'Content discovery',
-    desc: 'Discover URLs & JS from history + crawling (gau, waybackurls, katana, hakrawler). Final stage.',
+    desc: 'Discover URLs & JS from history + crawling (gau, waybackurls, katana, hakrawler). Chains JS endpoint discovery after.',
     Icon: RadarIcon,
     step: 4,
+  },
+  {
+    type: 'JS_ENDPOINT',
+    label: 'JS endpoint discovery',
+    desc: 'Extract endpoints from discovered JS files (LinkFinder, XNLinkFinder, JSluice). Reprocesses stored JS files. Final stage.',
+    Icon: SearchIcon,
+    step: 5,
   },
 ]
 

@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base
@@ -82,11 +82,25 @@ class ScanRun(Base, UUIDMixin, TimestampMixin):
     waybackurls_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     katana_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     hakrawler_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    subjs_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     total_urls_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     new_urls_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     total_js_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     new_js_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    # Phase 6.1 — JavaScript endpoint discovery metrics
+    linkfinder_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    xnlinkfinder_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    jsluice_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    js_processed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    js_failed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    total_endpoints_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    new_endpoints_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Checkpoint for pause/resume — worker-defined JSON describing where a paused
+    # scan should continue (e.g. {"js_offset": 900} for the JS endpoint worker).
+    resume_state: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

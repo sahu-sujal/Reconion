@@ -116,6 +116,18 @@ class SubdomainScanWorker(BaseWorker):
         try:
             scan_run_uuid = uuid.UUID(scan_run_id)
             scan_run, program, scope = self._load_scan_data(db, scan_run_uuid)
+
+            # Resume path: a scan paused *before chaining* only needs to chain
+            # the next phase — its own tools already ran and were persisted.
+            resume = scan_run.resume_state or {}
+            if resume.get("pending_chain") == "DNS":
+                self.mark_completed(scan_run_id, records_found=scan_run.records_found or 0)
+                self.scan_run_service.update_scan_run(
+                    db=db, scan_run_id=scan_run_id, clear_resume_state=True,
+                )
+                self._chain_dns_scan(db, program.id, scope.id)
+                return
+
             self.mark_running(scan_run_id)
             self.storage_service.init_scope_directories_by_id(program.id, scope.id)
 
@@ -219,8 +231,18 @@ class SubdomainScanWorker(BaseWorker):
 
             # ---- Step 14: Chain DNS scan ----------------------------- #
             # Enqueue a DNS scan for the same scope so the pipeline
-            # continues automatically after subdomain discovery.
+            # continues automatically after subdomain discovery — unless the
+            # user asked to pause/stop at this phase boundary.
             if metrics.unique_count > 0:
+                signal = self.check_control(scan_run_id)
+                if signal == "STOP":
+                    self.logger.info("Scan %s stopped before chaining DNS", scan_run_id)
+                    self.mark_cancelled(scan_run_id)
+                    return
+                if signal == "PAUSE":
+                    self.logger.info("Scan %s paused before chaining DNS", scan_run_id)
+                    self.mark_paused(scan_run_id, resume_state={"pending_chain": "DNS"})
+                    return
                 try:
                     self._chain_dns_scan(db, program.id, scope.id)
                 except Exception as chain_exc:

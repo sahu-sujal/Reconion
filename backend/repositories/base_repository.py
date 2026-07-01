@@ -15,6 +15,42 @@ class BaseRepository(Generic[ModelType]):
     def __init__(self, model: Type[ModelType]) -> None:
         self.model = model
 
+    # ------------------------------------------------------------------
+    # Scope guard (persistence-layer, caller-independent)
+    # ------------------------------------------------------------------
+
+    def _scope_target(self, db: Session, scope_id) -> str | None:
+        """Look up a scope's registrable target (e.g. ``ortto.com``). Cached."""
+        from database.models.scope import Scope
+
+        cache = getattr(self, "_scope_target_cache", None)
+        if cache is None:
+            cache = self._scope_target_cache = {}
+        key = str(scope_id)
+        if key not in cache:
+            cache[key] = db.scalar(select(Scope.target).where(Scope.id == scope_id))
+        return cache[key]
+
+    def enforce_scope(
+        self, db: Session, rows: list, host_key: str = "host", url_key: str | None = None
+    ) -> list:
+        """Drop rows whose host is out of scope — a final safety net.
+
+        Called by bulk upserts so an out-of-scope URL / JS file / endpoint can
+        never be persisted regardless of which worker path produced it. Rows are
+        assumed to share a single ``scope_id`` (they always do — one scan writes
+        one scope); the scope target is looked up once per scope. The host is
+        read from *host_key*, or derived from *url_key* for tables that store
+        only a URL.
+        """
+        if not rows:
+            return rows
+        from tools.common.scope_filter import filter_rows_in_scope
+
+        scope_id = rows[0].get("scope_id")
+        target = self._scope_target(db, scope_id) if scope_id else None
+        return filter_rows_in_scope(rows, target, host_key=host_key, url_key=url_key)
+
     def create(self, db: Session, **kwargs) -> ModelType:
         model = self.model(**kwargs)
         db.add(model)

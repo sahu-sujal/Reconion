@@ -1,5 +1,7 @@
 from database.models.asset import Asset
 from database.models.dns_record import DnsRecord
+from database.models.endpoint import Endpoint
+from database.models.endpoint_source import EndpointSource
 from database.models.finding import Finding
 from database.models.host import Host
 from database.models.http_response import HttpResponse
@@ -20,6 +22,8 @@ from database.models.url_source import UrlSource
 __all__ = [
     "Asset",
     "DnsRecord",
+    "Endpoint",
+    "EndpointSource",
     "Finding",
     "Host",
     "HttpResponse",

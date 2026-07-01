@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { scopesApi } from '../api/scopes'
-import { scansApi, ACTIVE_SCAN_STATUSES } from '../api/scans'
+import {
+  scansApi,
+  ACTIVE_SCAN_STATUSES,
+  PAUSABLE_SCAN_STATUSES,
+  RESUMABLE_SCAN_STATUSES,
+} from '../api/scans'
 import { PlusIcon, TrashIcon, ChevronRightIcon } from '../components/icons'
 import ScanReport from '../components/ScanReport'
 import StartScanModal from '../components/StartScanModal'
@@ -20,6 +25,7 @@ function ScanStatusBadge({ status }) {
   const map = {
     RUNNING: 'badge-running',
     PENDING: 'badge-pending',
+    PAUSED: 'badge-pending',
     COMPLETED: 'badge-active',
     FAILED: 'badge-failed',
     CANCELLED: 'badge-archived',
@@ -29,6 +35,14 @@ function ScanStatusBadge({ status }) {
 
 function isActive(scan) {
   return ACTIVE_SCAN_STATUSES.includes((scan.status || '').toUpperCase())
+}
+
+function isPausable(scan) {
+  return PAUSABLE_SCAN_STATUSES.includes((scan.status || '').toUpperCase())
+}
+
+function isResumable(scan) {
+  return RESUMABLE_SCAN_STATUSES.includes((scan.status || '').toUpperCase())
 }
 
 export default function ScopeScansPage() {
@@ -42,6 +56,7 @@ export default function ScopeScansPage() {
   const [showStart, setShowStart] = useState(false)
   const [starting, setStarting] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [controllingId, setControllingId] = useState(null) // pause/resume/stop in flight
   const [selectedId, setSelectedId] = useState(null) // expanded scan report
 
   const load = useCallback(async () => {
@@ -116,6 +131,25 @@ export default function ScopeScansPage() {
       setActionError(err.message)
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  // Pause / resume / stop a scan. `action` is 'pause' | 'resume' | 'stop'.
+  async function controlScan(scan, action, e) {
+    e.stopPropagation()
+    setActionError(null)
+    if (action === 'stop' &&
+        !window.confirm('Stop this scan? It will be cancelled and can then be deleted.')) {
+      return
+    }
+    setControllingId(scan.id)
+    try {
+      await scansApi[action](scan.id)
+      await load()
+    } catch (err) {
+      setActionError(err.message)
+    } finally {
+      setControllingId(null)
     }
   }
 
@@ -230,6 +264,46 @@ export default function ScopeScansPage() {
                   <div className="scan-card-meta">
                     <span className="muted">{found} found</span>
                     <span className="muted">{formatDate(scan.started_at)}</span>
+
+                    {/* Pause — while running/pending */}
+                    {isPausable(scan) && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={(e) => controlScan(scan, 'pause', e)}
+                        disabled={controllingId === scan.id}
+                        title="Pause at the next safe boundary"
+                      >
+                        {controllingId === scan.id ? '…' : '⏸ Pause'}
+                      </button>
+                    )}
+
+                    {/* Resume — while paused */}
+                    {isResumable(scan) && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={(e) => controlScan(scan, 'resume', e)}
+                        disabled={controllingId === scan.id}
+                        title="Resume from where it stopped"
+                      >
+                        {controllingId === scan.id ? '…' : '▶ Resume'}
+                      </button>
+                    )}
+
+                    {/* Stop — while active or paused */}
+                    {(isPausable(scan) || isResumable(scan)) && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-warning"
+                        onClick={(e) => controlScan(scan, 'stop', e)}
+                        disabled={controllingId === scan.id}
+                        title="Stop (cancel) this scan"
+                      >
+                        ⏹ Stop
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       className="btn btn-sm btn-danger"
@@ -237,7 +311,7 @@ export default function ScopeScansPage() {
                       disabled={active || deletingId === scan.id}
                       title={
                         active
-                          ? 'Cannot delete a running or pending scan'
+                          ? 'Stop the scan first, then delete'
                           : 'Delete scan'
                       }
                     >

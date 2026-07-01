@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useMatch } from 'react-router-dom'
 import { healthApi } from '../api/stats'
-import { GridIcon, RadarIcon, GaugeIcon, GlobeIcon, PulseIcon, LayersIcon } from './icons'
+import { GridIcon, RadarIcon, GaugeIcon, GlobeIcon, PulseIcon, LayersIcon, SearchIcon } from './icons'
 
 const GLOBAL_ITEMS = [{ to: '/', label: 'Programs', Icon: GridIcon, end: true }]
 
@@ -35,6 +35,7 @@ export default function Layout() {
         { to: `/scopes/${scopeId}`, label: 'Overview', Icon: GaugeIcon, end: true },
         { to: `/scopes/${scopeId}/subdomains`, label: 'Subdomains', Icon: GlobeIcon },
         { to: `/scopes/${scopeId}/content`, label: 'Content Discovery', Icon: LayersIcon },
+        { to: `/scopes/${scopeId}/endpoints`, label: 'Endpoints', Icon: SearchIcon },
         { to: `/scopes/${scopeId}/scans`, label: 'Scans', Icon: PulseIcon },
       ]
     : []

@@ -211,6 +211,46 @@ class HostRepository(BaseRepository[Host]):
             )
         db.commit()
 
+    def bulk_increment_endpoint_counts(
+        self,
+        db: Session,
+        endpoint_deltas: dict[uuid.UUID, int],
+    ) -> None:
+        """Increment hosts.endpoint_count by per-host deltas (Phase 6.1).
+
+        Maintained at insertion time so the API never runs COUNT(*) per host.
+        Only newly inserted endpoints should contribute deltas.
+        """
+        deltas = {hid: d for hid, d in endpoint_deltas.items() if hid and d}
+        if not deltas:
+            return
+        rows = list(deltas.items())
+        chunk_size = 5000
+        for start in range(0, len(rows), chunk_size):
+            chunk = rows[start:start + chunk_size]
+            placeholders = []
+            flat: dict[str, Any] = {}
+            for i, (hid, delta) in enumerate(chunk):
+                if i == 0:
+                    placeholders.append(
+                        f"(CAST(:id_{i} AS uuid), CAST(:e_{i} AS integer))"
+                    )
+                else:
+                    placeholders.append(f"(:id_{i}, :e_{i})")
+                flat[f"id_{i}"] = str(hid)
+                flat[f"e_{i}"] = int(delta)
+            db.execute(
+                text(f"""
+                    UPDATE hosts AS h SET
+                        endpoint_count = h.endpoint_count + v.e,
+                        updated_at = now()
+                    FROM (VALUES {", ".join(placeholders)}) AS v(id, e)
+                    WHERE h.id = v.id
+                """),
+                flat,
+            )
+        db.commit()
+
     def map_hostnames_to_ids(
         self, db: Session, scope_id: uuid.UUID
     ) -> dict[str, uuid.UUID]:

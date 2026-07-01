@@ -74,3 +74,57 @@ class BaseWorker:
             )
         finally:
             db.close()
+
+    # ------------------------------------------------------------------
+    # Pause / stop control (polled at safe boundaries)
+    # ------------------------------------------------------------------
+
+    def check_control(self, scan_run_id: str) -> str | None:
+        """Return the pending control signal ('PAUSE'/'STOP') for this scan.
+
+        Workers call this at safe boundaries (between tools/phases/batches).
+        ``None`` means keep going. Never raises — a Redis hiccup returns None so
+        the scan proceeds rather than crashing.
+        """
+        try:
+            from backend.queues.redis_client import get_scan_control
+            return get_scan_control(scan_run_id)
+        except Exception:
+            return None
+
+    def mark_paused(self, scan_run_id: str, resume_state: dict | None = None) -> None:
+        """Persist a PAUSED status + resume checkpoint and clear the signal."""
+        from backend.queues.redis_client import clear_scan_control
+        db = self.get_db()
+        try:
+            self.scan_run_service.update_scan_run(
+                db=db,
+                scan_run_id=scan_run_id,
+                status="PAUSED",
+                resume_state=resume_state,
+            )
+        finally:
+            db.close()
+        try:
+            clear_scan_control(scan_run_id)
+        except Exception:
+            pass
+
+    def mark_cancelled(self, scan_run_id: str) -> None:
+        """Persist a CANCELLED status, clear checkpoint + control signal."""
+        from backend.queues.redis_client import clear_scan_control
+        db = self.get_db()
+        try:
+            self.scan_run_service.update_scan_run(
+                db=db,
+                scan_run_id=scan_run_id,
+                status="CANCELLED",
+                clear_resume_state=True,
+                finished_at=datetime.now(timezone.utc),
+            )
+        finally:
+            db.close()
+        try:
+            clear_scan_control(scan_run_id)
+        except Exception:
+            pass

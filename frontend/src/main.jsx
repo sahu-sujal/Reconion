@@ -9,6 +9,7 @@ import ProgramDetailPage from './pages/ProgramDetailPage.jsx'
 import ScopeDetailPage from './pages/ScopeDetailPage.jsx'
 import ScopeSubdomainsPage from './pages/ScopeSubdomainsPage.jsx'
 import ScopeContentPage from './pages/ScopeContentPage.jsx'
+import ScopeEndpointsPage from './pages/ScopeEndpointsPage.jsx'
 import ScopeScansPage from './pages/ScopeScansPage.jsx'
 
 const router = createBrowserRouter([
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
       { path: 'scopes/:scopeId', element: <ScopeDetailPage /> },
       { path: 'scopes/:scopeId/subdomains', element: <ScopeSubdomainsPage /> },
       { path: 'scopes/:scopeId/content', element: <ScopeContentPage /> },
+      { path: 'scopes/:scopeId/endpoints', element: <ScopeEndpointsPage /> },
       { path: 'scopes/:scopeId/scans', element: <ScopeScansPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],

@@ -8,10 +8,12 @@ import tools.common.command_runner  # ensure ~/go/bin is on PATH
 from tools.common.dedupe_utils import deduplicate
 from tools.common.tool_base import ToolBase
 
-# knockpy is installed system-wide (/usr/bin/knockpy) but not on the venv PATH.
-# Resolve it explicitly so the runner works regardless of how the worker process
-# was launched (Celery, uvicorn, CLI).
-_KNOCKPY_BIN = "/usr/bin/knockpy"
+# Resolve knockpy explicitly so the runner works regardless of how the worker
+# process was launched: the repo-bundled copy under tools/bin first, then the
+# system install.
+from tools.common.tool_paths import resolve_tool
+
+_KNOCKPY_BIN = resolve_tool("knockpy", fallbacks=("/usr/bin/knockpy",))
 
 
 class KnockpyRunner(ToolBase):

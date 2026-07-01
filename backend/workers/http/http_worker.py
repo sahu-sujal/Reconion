@@ -71,6 +71,17 @@ class HttpScanWorker(BaseWorker):
         try:
             scan_run_uuid = uuid.UUID(scan_run_id)
             scan_run, program, scope = self._load_scan_data(db, scan_run_uuid)
+
+            # Resume path: paused before chaining → just chain content discovery.
+            resume = scan_run.resume_state or {}
+            if resume.get("pending_chain") == "CONTENT_DISCOVERY":
+                self.mark_completed(scan_run_id, records_found=scan_run.records_found or 0)
+                self.scan_run_service.update_scan_run(
+                    db=db, scan_run_id=scan_run_id, clear_resume_state=True,
+                )
+                self._chain_content_discovery(db, program.id, scope.id)
+                return
+
             self.mark_running(scan_run_id)
 
             self.storage_service.init_scope_directories_by_id(program.id, scope.id)
@@ -158,6 +169,15 @@ class HttpScanWorker(BaseWorker):
 
             # ---- Step 8: Chain content discovery ----------------------- #
             if metrics.httpx_live > 0:
+                signal = self.check_control(scan_run_id)
+                if signal == "STOP":
+                    self.logger.info("Scan %s stopped before chaining content discovery", scan_run_id)
+                    self.mark_cancelled(scan_run_id)
+                    return
+                if signal == "PAUSE":
+                    self.logger.info("Scan %s paused before chaining content discovery", scan_run_id)
+                    self.mark_paused(scan_run_id, resume_state={"pending_chain": "CONTENT_DISCOVERY"})
+                    return
                 try:
                     self._chain_content_discovery(db, program.id, scope.id)
                 except Exception as chain_exc:

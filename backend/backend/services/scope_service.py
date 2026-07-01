@@ -13,6 +13,7 @@ from database.models.program import Program
 from database.models.scope import Scope
 from database.models.asset import Asset
 from database.models.finding import Finding
+from database.models.endpoint import Endpoint
 from database.models.js_file import JsFile
 from database.models.notification import Notification
 from database.models.scan_run import ScanRun
@@ -155,6 +156,22 @@ class ScopeService:
         new_urls = int(getattr(latest_cd, "new_urls_count", 0) or 0) if latest_cd else 0
         new_js = int(getattr(latest_cd, "new_js_count", 0) or 0) if latest_cd else 0
 
+        # JS endpoint discovery (Phase 6.1) — true row count; new count from the
+        # latest JS_ENDPOINT scan run.
+        endpoints_count = db.scalar(
+            select(func.count()).select_from(Endpoint).where(Endpoint.scope_id == scope_id)
+        )
+        latest_ep = db.scalar(
+            select(ScanRun)
+            .where(
+                ScanRun.scope_id == scope_id,
+                ScanRun.scan_type == ScanType.JS_ENDPOINT.value,
+            )
+            .order_by(ScanRun.started_at.desc())
+            .limit(1)
+        )
+        new_endpoints = int(getattr(latest_ep, "new_endpoints_count", 0) or 0) if latest_ep else 0
+
         return {
             "scope_id": scope.id,
             "assets_count": int(assets_count or 0),
@@ -164,6 +181,8 @@ class ScopeService:
             "new_urls": new_urls,
             "js_count": int(js_count or 0),
             "new_js": new_js,
+            "endpoints_count": int(endpoints_count or 0),
+            "new_endpoints": new_endpoints,
             "last_scan_at": scope.last_scan_at,
             "last_notification_at": last_notification_at,
         }

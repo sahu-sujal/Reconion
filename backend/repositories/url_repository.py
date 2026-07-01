@@ -115,6 +115,11 @@ class URLRepository(BaseRepository[URL]):
         """
         if not rows:
             return [], []
+        # Scope guard: drop any out-of-scope host before writing (final safety
+        # net independent of the worker's own filtering).
+        rows = self.enforce_scope(db, rows, host_key="host")
+        if not rows:
+            return [], []
         # Deduplicate within the batch on the conflict key (latest wins) so a
         # single ON CONFLICT statement never touches the same row twice.
         deduped: dict[tuple[Any, Any], dict[str, Any]] = {}

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 function formatDate(value) {
   if (!value) return '—'
@@ -83,6 +84,23 @@ export default function SubdomainDrawer({ data, onClose }) {
             <div className="kv-list">
               <Field label="Subdomain" value={subdomain.subdomain} mono />
               <Field label="Source tools" value={subdomain.source} />
+              <Field
+                label="Endpoints"
+                value={
+                  subdomain.endpoint_count > 0 ? (
+                    <Link
+                      className="endpoint-count-link"
+                      to={`/scopes/${subdomain.scope_id}/endpoints?subdomain_id=${subdomain.id}&subdomain=${encodeURIComponent(subdomain.subdomain)}`}
+                      onClick={onClose}
+                      title="Open Endpoint Explorer filtered for this subdomain"
+                    >
+                      {subdomain.endpoint_count.toLocaleString()} →
+                    </Link>
+                  ) : (
+                    <span className="muted">0</span>
+                  )
+                }
+              />
               <Field label="First seen" value={formatDate(subdomain.first_seen)} />
               <Field label="Last seen" value={formatDate(subdomain.last_seen)} />
               {host ? (

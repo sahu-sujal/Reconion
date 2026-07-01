@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 
+from backend.api.endpoint_routes import router as endpoint_router
 from backend.api.health_routes import router as health_router
 from backend.api.program_routes import router as program_router
 from backend.api.scope_routes import router as scope_router
@@ -89,6 +90,7 @@ app.include_router(stats_router)
 app.include_router(program_router)
 app.include_router(scope_router)
 app.include_router(scan_router)
+app.include_router(endpoint_router)
 
 
 @app.middleware("http")

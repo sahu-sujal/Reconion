@@ -80,23 +80,21 @@ class HttpxRunner(ToolBase):
                 continue
         return records
 
-    # /usr/bin/httpx is the Python encode/httpx client — not projectdiscovery.
-    # Prefer the Go binary at ~/go/bin/httpx.
-    _BINARY_CANDIDATES = [
-        "/home/sujal-sahu/go/bin/httpx",
+    # /usr/bin/httpx is the Python encode/httpx client — not projectdiscovery,
+    # so we resolve the bundled Go binary first (never a bare PATH lookup that
+    # might hit the wrong httpx), then known Go-install locations.
+    _FALLBACKS = (
+        str(Path.home() / "go" / "bin" / "httpx"),
         "/root/go/bin/httpx",
         "/usr/local/bin/httpx",
-    ]
+    )
 
     @classmethod
     def _resolve_binary(cls) -> str:
-        import shutil
-        for path in cls._BINARY_CANDIDATES:
-            if Path(path).is_file():
-                return path
-        # Fall back to PATH lookup only if a candidate isn't found
-        found = shutil.which("httpx")
-        return found or "httpx"
+        from tools.common.tool_paths import bundled_binary
+        return bundled_binary("httpx") or next(
+            (p for p in cls._FALLBACKS if Path(p).is_file()), "httpx"
+        )
 
     def validate(self) -> bool:
         """Return True when projectdiscovery httpx binary is present and executable."""
