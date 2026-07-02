@@ -97,6 +97,13 @@ class ScanRun(Base, UUIDMixin, TimestampMixin):
     total_endpoints_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     new_endpoints_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
+    # Phase 6.2 — JavaScript secret discovery metrics
+    secretfinder_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    mantra_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    nuclei_exposures_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    total_secrets_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    new_secrets_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Checkpoint for pause/resume — worker-defined JSON describing where a paused
     # scan should continue (e.g. {"js_offset": 900} for the JS endpoint worker).

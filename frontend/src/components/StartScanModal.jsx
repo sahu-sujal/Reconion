@@ -36,9 +36,16 @@ const STAGES = [
   {
     type: 'JS_ENDPOINT',
     label: 'JS endpoint discovery',
-    desc: 'Extract endpoints from discovered JS files (LinkFinder, XNLinkFinder, JSluice). Reprocesses stored JS files. Final stage.',
+    desc: 'Extract endpoints from discovered JS files (LinkFinder, XNLinkFinder, JSluice). Chains JS secret discovery after.',
     Icon: SearchIcon,
     step: 5,
+  },
+  {
+    type: 'JS_SECRET',
+    label: 'JS secret discovery',
+    desc: 'Scan discovered JS files for secrets/keys (SecretFinder, Mantra, Nuclei exposures). Reprocesses stored JS files. Final stage.',
+    Icon: SearchIcon,
+    step: 6,
   },
 ]
 

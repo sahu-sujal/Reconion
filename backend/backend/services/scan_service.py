@@ -51,6 +51,10 @@ class ScanService:
             "workers.js_endpoint_worker.run_js_endpoint_scan",
             "js_endpoint_worker",
         ),
+        ScanType.JS_SECRET.value: (
+            "workers.js_secret_worker.run_js_secret_scan",
+            "js_secret_worker",
+        ),
     }
 
     def start_scan(

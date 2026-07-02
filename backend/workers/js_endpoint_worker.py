@@ -217,6 +217,16 @@ class JsEndpointWorker(BaseWorker):
                 duration_seconds=duration,
             )
 
+            # ---- Chain: JS secret discovery (Phase 6.2) ---------------- #
+            # Both phases consume js_files; secret discovery runs after endpoints.
+            try:
+                self._chain_js_secret_scan(db, program.id, scope.id)
+            except Exception as chain_exc:
+                self.logger.warning(
+                    "Failed to chain JS secret scan after endpoint discovery %s: %s",
+                    scan_run_id, chain_exc,
+                )
+
         except Exception as exc:
             self.logger.exception("JS endpoint scan %s failed: %s", scan_run_id, exc)
             self.mark_failed(scan_run_id, str(exc))
@@ -643,6 +653,23 @@ class JsEndpointWorker(BaseWorker):
         program = self.program_service.get_program(db=db, program_id=scan_run.program_id)
         scope = self.scope_service.get_scope(db=db, scope_id=scan_run.scope_id)
         return scan_run, program, scope
+
+    def _chain_js_secret_scan(self, db, program_id: uuid.UUID, scope_id: uuid.UUID) -> None:
+        """Create a JS_SECRET ScanRun and enqueue run_js_secret_scan (Phase 6.2)."""
+        from backend.services.scan_run_service import ScanRunService
+        from database.models.enums import ScanStatus, ScanType
+
+        svc = ScanRunService()
+        sec_scan = svc.create_scan_run(
+            db=db, program_id=program_id, scope_id=scope_id,
+            scan_type=ScanType.JS_SECRET.value, worker_name="js_secret_worker",
+            status=ScanStatus.PENDING.value,
+        )
+        celery_app.send_task(
+            "workers.js_secret_worker.run_js_secret_scan",
+            args=[str(sec_scan.id)], countdown=2,
+        )
+        self.logger.info("Chained JS secret scan %s for scope %s", sec_scan.id, scope_id)
 
 
 # ------------------------------------------------------------------

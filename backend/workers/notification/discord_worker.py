@@ -494,6 +494,140 @@ def send_js_endpoint_notification(
 
 
 # ------------------------------------------------------------------ #
+# JavaScript secret discovery notifications (Phase 6.2)                 #
+# ------------------------------------------------------------------ #
+
+# Severity → embed colour + emoji, and (future) per-severity webhook routing.
+_SECRET_SEVERITY_STYLE = {
+    "CRITICAL": (0xFF0000, "\U0001f6a8"),   # red, 🚨
+    "HIGH": (0xFF8C00, "⚠️"),      # orange, ⚠️
+    "MEDIUM": (0xFFD700, "\U0001f511"),      # gold, 🔑
+    "LOW": (0x5865F2, "\U0001f50d"),         # blurple, 🔍
+    "INFO": (0x808080, "ℹ️"),      # grey, ℹ️
+}
+
+
+def _secret_webhook_for(severity: str) -> str | None:
+    """Resolve the Discord webhook for a secret severity.
+
+    Routing is designed to be per-severity: set e.g. ``DISCORD_WEBHOOK_CRITICAL``
+    to send critical secrets to a dedicated channel. Falls back to the default
+    ``DISCORD_WEBHOOK_URL`` when no severity-specific webhook is configured.
+    """
+    specific = os.getenv(f"DISCORD_WEBHOOK_{(severity or '').upper()}")
+    return specific or _get_webhook_url()
+
+
+def send_secret_notification(
+    webhook_url: str | None,
+    program_name: str,
+    scope_target: str,
+    host: str | None,
+    secret_type: str,
+    severity: str,
+    js_url: str | None,
+    tools: list[str],
+    secret_value: str | None = None,
+) -> bool:
+    """Send a Discord embed for a single newly-discovered secret.
+
+    Routed by severity (see :func:`_secret_webhook_for`). Never raises. The
+    secret value is included truncated for context (full value lives in the DB).
+    """
+    resolved_url = webhook_url or _secret_webhook_for(severity)
+    if not resolved_url:
+        logger.warning("Discord webhook not configured — secret notification skipped")
+        return False
+
+    color, emoji = _SECRET_SEVERITY_STYLE.get((severity or "INFO").upper(),
+                                              _SECRET_SEVERITY_STYLE["INFO"])
+    pretty_type = secret_type.replace("_", " ").title()
+    lines = [
+        f"**Program:** {program_name}",
+        f"**Scope:** `{scope_target}`",
+    ]
+    if host:
+        lines.append(f"**Host:** `{host}`")
+    lines.append(f"**Type:** {pretty_type}")
+    lines.append(f"**Severity:** {severity}")
+    if js_url:
+        lines.append(f"**JavaScript:** {js_url}")
+    lines.append(f"**Detected By:** {', '.join(tools)}")
+    if secret_value:
+        preview = secret_value if len(secret_value) <= 64 else secret_value[:61] + "…"
+        lines.append(f"**Value:** `{preview}`")
+
+    embed = {
+        "title": f"{emoji} {severity.title()} Secret Detected — {pretty_type}",
+        "description": "\n".join(lines),
+        "color": color,
+    }
+    try:
+        _send_webhook(resolved_url, json.dumps({"embeds": [embed]}).encode("utf-8"))
+        return True
+    except HTTPError as exc:
+        logger.warning("Discord secret webhook HTTP error %s %s", exc.code, exc.reason)
+    except URLError as exc:
+        logger.warning("Discord secret webhook URL error: %s", exc.reason)
+    except Exception as exc:
+        logger.warning("Discord secret notification failed: %s", exc)
+    return False
+
+
+def send_js_secret_summary(
+    webhook_url: str | None,
+    program_name: str,
+    scope_target: str,
+    metrics,              # SecretMetrics dataclass — avoid circular import
+    duration_seconds: float,
+) -> bool:
+    """Send a Discord embed summarising a completed JS secret scan. Never raises."""
+    resolved_url = webhook_url or _get_webhook_url()
+    if not resolved_url:
+        logger.warning("Discord webhook not configured — secret summary skipped")
+        return False
+
+    mins, secs = divmod(int(duration_seconds), 60)
+    duration_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+    color = 0xFF0000 if metrics.new_secrets > 0 else 0x5865F2
+
+    tool_block = "\n".join([
+        "```",
+        f"SecretFinder  {metrics.secretfinder_count:>9}",
+        f"Mantra        {metrics.mantra_count:>9}",
+        f"Nuclei Exp.   {metrics.nuclei_count:>9}",
+        "─────────────────────────",
+        f"JS processed  {metrics.js_processed:>9}",
+        f"JS failed     {metrics.js_failed:>9}",
+        f"Total secrets {metrics.total_secrets:>9}",
+        f"New secrets   {metrics.new_secrets:>9}",
+        "```",
+    ])
+    embed = {
+        "title": "\U0001f510 JavaScript Secret Discovery Completed",
+        "description": "\n".join([
+            f"**Program:** {program_name}",
+            f"**Scope:** `{scope_target}`",
+            "",
+            f"**New Secrets:** {metrics.new_secrets:,}",
+            f"**Total Secrets:** {metrics.total_secrets:,}",
+            f"**Duration:** {duration_str}",
+            "",
+            "**Scanner breakdown (raw findings):**",
+            tool_block,
+        ]),
+        "color": color,
+    }
+    try:
+        _send_webhook(resolved_url, json.dumps({"embeds": [embed]}).encode("utf-8"))
+        logger.info("Discord JS secret summary sent: %s/%s", program_name, scope_target)
+        return True
+    except Exception as exc:
+        logger.warning("Discord JS secret summary failed: %s", exc)
+    return False
+
+
+# ------------------------------------------------------------------ #
 # Celery async wrapper (kept for backward compat)                       #
 # ------------------------------------------------------------------ #
 

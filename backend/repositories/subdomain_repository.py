@@ -62,6 +62,41 @@ class SubdomainRepository(BaseRepository[Subdomain]):
             )
         db.commit()
 
+    def bulk_increment_secret_counts(
+        self,
+        db: Session,
+        scope_id: uuid.UUID,
+        name_deltas: dict[str, int],
+    ) -> None:
+        """Increment subdomains.secret_count keyed by subdomain FQDN (Phase 6.2)."""
+        deltas = {name: d for name, d in name_deltas.items() if name and d}
+        if not deltas:
+            return
+        rows = list(deltas.items())
+        chunk_size = 5000
+        for start in range(0, len(rows), chunk_size):
+            chunk = rows[start:start + chunk_size]
+            placeholders = []
+            flat: dict[str, Any] = {"scope_id": str(scope_id)}
+            for i, (name, delta) in enumerate(chunk):
+                if i == 0:
+                    placeholders.append(f"(CAST(:n_{i} AS varchar), CAST(:e_{i} AS integer))")
+                else:
+                    placeholders.append(f"(:n_{i}, :e_{i})")
+                flat[f"n_{i}"] = name
+                flat[f"e_{i}"] = int(delta)
+            db.execute(
+                text(f"""
+                    UPDATE subdomains AS s SET
+                        secret_count = s.secret_count + v.e,
+                        updated_at = now()
+                    FROM (VALUES {", ".join(placeholders)}) AS v(name, e)
+                    WHERE s.scope_id = CAST(:scope_id AS uuid) AND s.subdomain = v.name
+                """),
+                flat,
+            )
+        db.commit()
+
     # ------------------------------------------------------------------ #
     # Filtered list queries                                                 #
     # ------------------------------------------------------------------ #

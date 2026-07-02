@@ -7,6 +7,8 @@ from database.models.host import Host
 from database.models.http_response import HttpResponse
 from database.models.js_file import JsFile
 from database.models.js_file_source import JsFileSource
+from database.models.js_secret import JsSecret
+from database.models.js_secret_source import JsSecretSource
 from database.models.program import Program
 from database.models.program_settings import ProgramSettings
 from database.models.notification import Notification
@@ -29,6 +31,8 @@ __all__ = [
     "HttpResponse",
     "JsFile",
     "JsFileSource",
+    "JsSecret",
+    "JsSecretSource",
     "Program",
     "ProgramSettings",
     "Notification",

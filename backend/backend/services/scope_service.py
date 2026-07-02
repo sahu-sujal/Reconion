@@ -172,6 +172,19 @@ class ScopeService:
         )
         new_endpoints = int(getattr(latest_ep, "new_endpoints_count", 0) or 0) if latest_ep else 0
 
+        # JS secret discovery (Phase 6.2).
+        from database.models.js_secret import JsSecret
+        secrets_count = db.scalar(
+            select(func.count()).select_from(JsSecret).where(JsSecret.scope_id == scope_id)
+        )
+        latest_sec = db.scalar(
+            select(ScanRun)
+            .where(ScanRun.scope_id == scope_id, ScanRun.scan_type == ScanType.JS_SECRET.value)
+            .order_by(ScanRun.started_at.desc())
+            .limit(1)
+        )
+        new_secrets = int(getattr(latest_sec, "new_secrets_count", 0) or 0) if latest_sec else 0
+
         return {
             "scope_id": scope.id,
             "assets_count": int(assets_count or 0),
@@ -183,6 +196,8 @@ class ScopeService:
             "new_js": new_js,
             "endpoints_count": int(endpoints_count or 0),
             "new_endpoints": new_endpoints,
+            "secrets_count": int(secrets_count or 0),
+            "new_secrets": new_secrets,
             "last_scan_at": scope.last_scan_at,
             "last_notification_at": last_notification_at,
         }

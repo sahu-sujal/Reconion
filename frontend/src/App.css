@@ -1784,3 +1784,22 @@
 .btn-warning:hover {
   background: var(--warning-bg);
 }
+
+/* ---- Secret Explorer (Phase 6.2) ---- */
+.secret-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 340px;
+}
+.secret-value code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+  cursor: pointer;
+}
+.secret-copy {
+  padding: 0 6px;
+  line-height: 1;
+}
