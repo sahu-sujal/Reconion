@@ -5,9 +5,11 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -16,7 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base
-from database.models.mixins import TimestampMixin, UUIDMixin
+from database.models.mixins import AssetClassificationMixin, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from database.models.endpoint_source import EndpointSource
@@ -26,7 +28,7 @@ if TYPE_CHECKING:
     from database.models.scope import Scope
 
 
-class Endpoint(Base, UUIDMixin, TimestampMixin):
+class Endpoint(Base, UUIDMixin, TimestampMixin, AssetClassificationMixin):
     """A fully-qualified endpoint extracted from a JavaScript file (Phase 6.1).
 
     Every endpoint is stored as an **absolute** URL resolved against the JS file
@@ -86,6 +88,15 @@ class Endpoint(Base, UUIDMixin, TimestampMixin):
     path: Mapped[str | None] = mapped_column(Text, nullable=True)
     query: Mapped[str | None] = mapped_column(Text, nullable=True)
     fragment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Extension / parameters — populated by the Asset Classification Engine and
+    # consumed by the API category display + later Parameter Discovery.
+    extension: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    parameter_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    has_parameters: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false", index=True
+    )
 
     # Free-form JSON array of EndpointTool labels — extractor-agnostic.
     discovery_tools: Mapped[list[str]] = mapped_column(

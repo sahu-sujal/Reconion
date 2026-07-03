@@ -217,6 +217,19 @@ class JsEndpointWorker(BaseWorker):
                 duration_seconds=duration,
             )
 
+            # ---- Asset Classification (Phase 6.3) ---------------------- #
+            # URLs + endpoints are both collected by now, so classify every
+            # content asset in the scope in place (no network) before any active
+            # analysis. Failure here must not abort the scan or the chain.
+            try:
+                from backend.services.classification_service import ClassificationService
+                ClassificationService().classify_scope(db, scope.id)
+            except Exception as cls_exc:
+                self.logger.warning(
+                    "Asset classification failed after endpoint discovery %s: %s",
+                    scan_run_id, cls_exc,
+                )
+
             # ---- Chain: JS secret discovery (Phase 6.2) ---------------- #
             # Both phases consume js_files; secret discovery runs after endpoints.
             try:

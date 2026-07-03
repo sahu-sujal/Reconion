@@ -1,24 +1,25 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { scopesApi } from '../api/scopes'
+import { assetsApi } from '../api/assets'
 import { ChevronRightIcon } from '../components/icons'
-import ContentDiscoveryPanel from '../components/ContentDiscoveryPanel'
+import AssetExplorer from '../components/AssetExplorer'
 
 export default function ScopeContentPage() {
   const { scopeId } = useParams()
 
   const [scope, setScope] = useState(null)
-  const [stats, setStats] = useState(null)
+  const [assetTotal, setAssetTotal] = useState(null)
 
   useEffect(() => {
     let active = true
     Promise.all([
       scopesApi.get(scopeId).catch(() => null),
-      scopesApi.stats(scopeId).catch(() => null),
+      assetsApi.stats(scopeId).catch(() => null),
     ]).then(([s, st]) => {
       if (!active) return
       setScope(s)
-      setStats(st)
+      setAssetTotal(st?.total_assets ?? 0)
     })
     return () => {
       active = false
@@ -38,20 +39,19 @@ export default function ScopeContentPage() {
         )}
         <Link to={`/scopes/${scopeId}`}>{scope?.target}</Link>
         <ChevronRightIcon className="crumb-sep" width={14} height={14} />
-        <span>Content Discovery</span>
+        <span>Asset Explorer</span>
       </div>
 
       <header className="page-header">
         <div>
-          <h1>Content Discovery</h1>
+          <h1>Asset Explorer</h1>
           <p className="subtitle">
-            {(stats?.urls_count ?? 0).toLocaleString()} URLs ·{' '}
-            {(stats?.js_count ?? 0).toLocaleString()} JS files · 25 per page
+            {(assetTotal ?? 0).toLocaleString()} classified assets · organized by type
           </p>
         </div>
       </header>
 
-      <ContentDiscoveryPanel scopeId={scopeId} stats={stats} />
+      <AssetExplorer scopeId={scopeId} />
     </div>
   )
 }

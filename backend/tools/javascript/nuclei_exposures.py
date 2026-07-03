@@ -26,11 +26,25 @@ from tools.javascript.secret_tool_base import RawSecret, SecretToolBase
 
 
 def _resolve_templates() -> str | None:
-    for c in (
-        os.getenv("NUCLEI_EXPOSURES_PATH", ""),
+    """Resolve the Nuclei template dir for JS secret discovery.
+
+    Defaults to ``http/exposures/tokens`` — the regex templates that match API
+    keys / secrets *inside* a response body. The broader ``http/exposures`` tree
+    (~700 templates) mostly probes the *server* for exposed paths (.git, backups,
+    configs), which is wasted work against a specific .js URL and made a 12-URL
+    batch take 200+ seconds. Set ``NUCLEI_EXPOSURES_PATH`` to override (e.g. point
+    it back at the full ``exposures`` dir).
+    """
+    base_candidates = (
         str(repo_root() / "nuclei-templates" / "http" / "exposures"),
         str(Path.home() / "nuclei-templates" / "http" / "exposures"),
-    ):
+    )
+    candidates = [os.getenv("NUCLEI_EXPOSURES_PATH", "")]
+    # Prefer the tokens subdir when present, else fall back to the full tree.
+    for base in base_candidates:
+        candidates.append(str(Path(base) / "tokens"))
+        candidates.append(base)
+    for c in candidates:
         if c and Path(c).is_dir():
             return c
     return None
@@ -39,12 +53,21 @@ def _resolve_templates() -> str | None:
 class NucleiExposuresRunner(SecretToolBase):
     """Discover exposed secrets in JS URLs using Nuclei http/exposures templates."""
 
-    def __init__(self, timeout: int = 1800, concurrency: int = 25, rate_limit: int = 150) -> None:
+    def __init__(self, timeout: int = 1800, concurrency: int | None = None,
+                 rate_limit: int | None = None, bulk_size: int | None = None) -> None:
         super().__init__(timeout=timeout)
         self._bin = resolve_tool("nuclei")
         self._templates = _resolve_templates()
+        # Tunable via env so throughput can be raised without a code change.
+        if concurrency is None:
+            concurrency = int(os.getenv("NUCLEI_CONCURRENCY", "50"))
+        if rate_limit is None:
+            rate_limit = int(os.getenv("NUCLEI_RATE_LIMIT", "300"))
+        if bulk_size is None:
+            bulk_size = int(os.getenv("NUCLEI_BULK_SIZE", "50"))
         self._concurrency = max(1, concurrency)
         self._rate_limit = max(1, rate_limit)
+        self._bulk_size = max(1, bulk_size)
 
     @property
     def tool_name(self) -> str:
@@ -113,6 +136,7 @@ class NucleiExposuresRunner(SecretToolBase):
             "-nc",                    # no color
             "-c", str(self._concurrency),
             "-rate-limit", str(self._rate_limit),
+            "-bulk-size", str(self._bulk_size),   # hosts scanned in parallel per template
             "-disable-update-check",
         ]
         result = run_command(cmd, timeout=self.timeout, stdin_data="\n".join(urls) + "\n")

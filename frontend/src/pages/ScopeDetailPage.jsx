@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { scopesApi } from '../api/scopes'
+import { assetsApi } from '../api/assets'
 import { scansApi, ACTIVE_SCAN_STATUSES } from '../api/scans'
 import { ChevronRightIcon } from '../components/icons'
 
@@ -58,6 +59,7 @@ export default function ScopeDetailPage() {
 
   const [scope, setScope] = useState(null)
   const [stats, setStats] = useState(null)
+  const [assetStats, setAssetStats] = useState(null)
   const [scans, setScans] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -65,13 +67,15 @@ export default function ScopeDetailPage() {
   const load = useCallback(async () => {
     setError(null)
     try {
-      const [scopeData, statsData, scanList] = await Promise.all([
+      const [scopeData, statsData, assetStatsData, scanList] = await Promise.all([
         scopesApi.get(scopeId),
         scopesApi.stats(scopeId).catch(() => null), // stats best-effort
+        assetsApi.stats(scopeId).catch(() => null), // asset stats best-effort
         scansApi.list({ scopeId }).catch(() => []),
       ])
       setScope(scopeData)
       setStats(statsData)
+      setAssetStats(assetStatsData)
       setScans(Array.isArray(scanList) ? scanList : [])
     } catch (err) {
       setError(err.message)
@@ -98,6 +102,26 @@ export default function ScopeDetailPage() {
       ),
     }
   }, [scans])
+
+  // Asset category counts for the dashboard tiles. Static/Sensitive roll up
+  // several categories so a few tiles summarize the whole taxonomy.
+  const assetCounts = useMemo(() => assetStats?.by_category || {}, [assetStats])
+  const assetStaticCount = useMemo(
+    () =>
+      ['JAVASCRIPT', 'STYLESHEET', 'IMAGE', 'FONT', 'VIDEO', 'AUDIO', 'STATIC'].reduce(
+        (sum, c) => sum + (assetCounts[c] || 0),
+        0,
+      ),
+    [assetCounts],
+  )
+  const assetSensitiveCount = useMemo(
+    () =>
+      ['ARCHIVE', 'CONFIGURATION', 'LOG_BACKUP', 'SCRIPT'].reduce(
+        (sum, c) => sum + (assetCounts[c] || 0),
+        0,
+      ),
+    [assetCounts],
+  )
 
   // Auto-refresh while a scan is active so progress shows live.
   useEffect(() => {
@@ -182,13 +206,20 @@ export default function ScopeDetailPage() {
         </div>
       )}
 
-      {/* ---- Scope stats ---- */}
+      {/* ---- Asset statistics (Phase 6.3) ---- */}
       <div className="stats-grid">
-        <StatCard label="Assets" value={stats?.assets_count} accent />
-        <StatCard label="URLs" value={stats?.urls_count} />
-        <StatCard label="JS files" value={stats?.js_count} />
+        <StatCard label="Total Assets" value={assetStats?.total_assets} accent />
+        <StatCard label="APIs" value={assetCounts.API} />
+        <StatCard label="Dynamic Pages" value={assetCounts.DYNAMIC_PAGE} />
+        <StatCard label="JavaScript" value={assetCounts.JAVASCRIPT} />
+        <StatCard label="Documents" value={assetCounts.DOCUMENT} />
+        <StatCard label="Static Assets" value={assetStaticCount} />
+        <StatCard label="Sensitive Files" value={assetSensitiveCount} accent />
+        <StatCard label="Images" value={assetCounts.IMAGE} />
+        <StatCard label="Archives" value={assetCounts.ARCHIVE} />
+        <StatCard label="Configuration" value={assetCounts.CONFIGURATION} />
+        <StatCard label="Unknown" value={assetCounts.UNKNOWN} />
         <StatCard label="Findings" value={stats?.findings_count} />
-        <StatCard label="Total scans" value={scans.length} />
         <StatCard label="Active scans" value={activeScans.length} accent />
       </div>
 

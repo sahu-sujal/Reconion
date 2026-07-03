@@ -16,6 +16,7 @@ Because Mantra fetches the URLs itself, it is fed the stored JS URLs directly
 """
 from __future__ import annotations
 
+import os
 import re
 
 from tools.common.command_runner import run_command
@@ -30,9 +31,12 @@ _LINE_RE = re.compile(r"^\[\+\]\s+(\S+)\s+\[(.+?)\](?:\s+\[Line:\s*\d+\])?\s*$")
 class MantraRunner(SecretToolBase):
     """Discover secrets in JS URLs using Mantra."""
 
-    def __init__(self, timeout: int = 600, threads: int = 50) -> None:
+    def __init__(self, timeout: int = 600, threads: int | None = None) -> None:
         super().__init__(timeout=timeout)
         self._bin = resolve_tool("mantra")
+        # Tunable via env (MANTRA_THREADS) so throughput can be raised without code.
+        if threads is None:
+            threads = int(os.getenv("MANTRA_THREADS", "50"))
         self._threads = max(1, threads)
 
     @property

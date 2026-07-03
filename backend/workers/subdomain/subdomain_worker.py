@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import subprocess
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -135,37 +136,13 @@ class SubdomainScanWorker(BaseWorker):
             proc_dir = self.storage_service.get_processed_path_by_id(program.id, scope.id, "subdomains")
             now = datetime.now(timezone.utc)
 
-            # ---- Steps 1-7: Run all enumeration tools ----------------- #
-            # source_map[subdomain] = sorted comma-sep tool names
+            # ---- Steps 1-7: Run all enumeration tools in parallel ----- #
+            # The 7 tools are independent (each takes scope.target and writes its
+            # own raw/<tool>.txt), so they run concurrently — total time drops from
+            # the sum of all tools to roughly the slowest one.
+            # source_map[subdomain] = set of tool names
             source_map: dict[str, set[str]] = {}
-
-            self._run_tool(db, scan_run, scope, program, metrics, raw_dir, source_map,
-                           "subfinder", SubfinderRunner(timeout=300),
-                           "subfinder_raw", "subfinder_count")
-
-            self._run_tool(db, scan_run, scope, program, metrics, raw_dir, source_map,
-                           "assetfinder", AssetfinderRunner(timeout=300),
-                           "assetfinder_raw", "assetfinder_count")
-
-            self._run_tool(db, scan_run, scope, program, metrics, raw_dir, source_map,
-                           "knockpy", KnockpyRunner(timeout=600),
-                           "knockpy_raw", "knockpy_count")
-
-            self._run_tool(db, scan_run, scope, program, metrics, raw_dir, source_map,
-                           "dnsgen", DnsgenRunner(timeout=300),
-                           "dnsgen_raw", "dnsgen_count")
-
-            self._run_tool(db, scan_run, scope, program, metrics, raw_dir, source_map,
-                           "chaos", ChaosRunner(timeout=300),
-                           "chaos_raw", "chaos_count")
-
-            self._run_tool(db, scan_run, scope, program, metrics, raw_dir, source_map,
-                           "crtsh", CrtshRunner(timeout=120),
-                           "crtsh_raw", "crtsh_count")
-
-            self._run_tool(db, scan_run, scope, program, metrics, raw_dir, source_map,
-                           "findomain", FindomainRunner(timeout=300),
-                           "findomain_raw", "findomain_count")
+            self._run_tools_parallel(db, scan_run, scope, metrics, raw_dir, source_map)
 
             # ---- Step 8: Disk-based merge + dedup -------------------- #
             metrics.merged_count = (
@@ -266,50 +243,82 @@ class SubdomainScanWorker(BaseWorker):
     # Generic tool runner                                                   #
     # ------------------------------------------------------------------ #
 
-    def _run_tool(
+    # (tool_name, runner, raw_attr, count_attr). Register a new enumeration tool
+    # here and it joins the parallel run automatically.
+    def _enum_tools(self, scope) -> list[tuple[str, Any, str, str]]:
+        return [
+            ("subfinder", SubfinderRunner(timeout=300), "subfinder_raw", "subfinder_count"),
+            ("assetfinder", AssetfinderRunner(timeout=300), "assetfinder_raw", "assetfinder_count"),
+            ("knockpy", KnockpyRunner(timeout=600), "knockpy_raw", "knockpy_count"),
+            ("dnsgen", DnsgenRunner(timeout=300), "dnsgen_raw", "dnsgen_count"),
+            ("chaos", ChaosRunner(timeout=300), "chaos_raw", "chaos_count"),
+            ("crtsh", CrtshRunner(timeout=120), "crtsh_raw", "crtsh_count"),
+            ("findomain", FindomainRunner(timeout=300), "findomain_raw", "findomain_count"),
+        ]
+
+    def _run_tools_parallel(
         self,
         db,
         scan_run,
         scope,
-        program,
         metrics: ScanMetrics,
         raw_dir: Path,
         source_map: dict[str, set[str]],
-        tool_name: str,
-        runner,
-        raw_attr: str,
-        count_attr: str,
     ) -> None:
-        """Run one enumeration tool, save its raw output, filter in-scope, and
-        accumulate results into *source_map*.  A single tool failure is isolated
-        — it logs an error and returns without raising.
+        """Run every enumeration tool concurrently, then merge results.
+
+        Threads do CPU/IO-only work (run the tool, write their own raw/<tool>.txt,
+        filter in-scope) and return plain data — no DB access or shared-map
+        mutation inside a thread. All DB writes and the source_map merge happen on
+        this (main) thread as futures complete, so nothing is touched concurrently.
+        A single tool failing is isolated and never aborts the scan.
         """
-        exec_rec = self._create_tool_execution(
-            db, scan_run.id, tool_name,
-            f"{tool_name} -d {scope.target}",
-        )
-        try:
+        tools = self._enum_tools(scope)
+
+        def _work(tool_name: str, runner) -> tuple[list[str], list[str]]:
+            # Runs in a worker thread — pure compute + this tool's own raw file.
             raw: list[str] = runner.run(scope.target)
             self.storage_service.save_lines_artifact(raw_dir, f"{tool_name}.txt", raw)
             filtered = filter_in_scope(raw, scope.target)
-            setattr(metrics, raw_attr, len(raw))
-            setattr(metrics, count_attr, len(filtered))
-            for sub in filtered:
-                source_map.setdefault(sub, set()).add(tool_name)
-            self._finalize_tool_execution(
-                db, exec_rec, ToolExecutionStatus.COMPLETED,
-                raw_records_found=len(raw),
-                records_found=len(filtered),
+            return raw, filtered
+
+        # Create all execution records up-front on the main thread.
+        exec_recs = {
+            tool_name: self._create_tool_execution(
+                db, scan_run.id, tool_name, f"{tool_name} -d {scope.target}"
             )
-            self.logger.info(
-                "%s: %d raw → %d in-scope (%d filtered out)",
-                tool_name, len(raw), len(filtered), len(raw) - len(filtered),
-            )
-        except RuntimeError as exc:
-            self._finalize_tool_execution(
-                db, exec_rec, ToolExecutionStatus.FAILED, error_message=str(exc)
-            )
-            self.logger.error("%s failed: %s", tool_name, exc)
+            for tool_name, _, _, _ in tools
+        }
+        meta = {tn: (raw_attr, count_attr) for tn, _, raw_attr, count_attr in tools}
+
+        with ThreadPoolExecutor(max_workers=len(tools)) as pool:
+            future_map = {
+                pool.submit(_work, tool_name, runner): tool_name
+                for tool_name, runner, _, _ in tools
+            }
+            for future in as_completed(future_map):
+                tool_name = future_map[future]
+                raw_attr, count_attr = meta[tool_name]
+                try:
+                    raw, filtered = future.result()
+                    setattr(metrics, raw_attr, len(raw))
+                    setattr(metrics, count_attr, len(filtered))
+                    for sub in filtered:
+                        source_map.setdefault(sub, set()).add(tool_name)
+                    self._finalize_tool_execution(
+                        db, exec_recs[tool_name], ToolExecutionStatus.COMPLETED,
+                        raw_records_found=len(raw), records_found=len(filtered),
+                    )
+                    self.logger.info(
+                        "%s: %d raw → %d in-scope (%d filtered out)",
+                        tool_name, len(raw), len(filtered), len(raw) - len(filtered),
+                    )
+                except Exception as exc:  # one tool failing must not kill the scan
+                    self._finalize_tool_execution(
+                        db, exec_recs[tool_name], ToolExecutionStatus.FAILED,
+                        error_message=str(exc),
+                    )
+                    self.logger.error("%s failed: %s", tool_name, exc)
 
     # ------------------------------------------------------------------ #
     # Disk-based merge                                                      #

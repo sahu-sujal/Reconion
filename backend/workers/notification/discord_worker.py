@@ -628,6 +628,75 @@ def send_js_secret_summary(
 
 
 # ------------------------------------------------------------------ #
+# Active parameter discovery notification (Phase 6.4)                   #
+# ------------------------------------------------------------------ #
+
+def send_parameter_discovery_notification(
+    webhook_url: str | None,
+    program_name: str,
+    scope_target: str,
+    metrics,              # ParameterMetrics dataclass — avoid circular import
+    duration_seconds: float,
+) -> bool:
+    """Send a structured Discord embed for a completed parameter-discovery scan.
+
+    Never raises.
+    """
+    resolved_url = webhook_url or _get_webhook_url()
+    if not resolved_url:
+        logger.warning("Discord webhook not configured — parameter notification skipped")
+        return False
+
+    has_new = metrics.new_parameters > 0
+    color = 0x00FF7F if has_new else 0x5865F2
+
+    mins, secs = divmod(int(duration_seconds), 60)
+    duration_str = f"{mins}m {secs}s" if mins else f"{secs}s"
+
+    tool_block = "\n".join([
+        "```",
+        f"Arjun         {metrics.arjun_count:>9}",
+        f"ParamSpider   {metrics.paramspider_count:>9}",
+        "─────────────────────────",
+        f"Assets scanned {metrics.assets_scanned:>8}",
+        f"Total params  {metrics.total_parameters:>9}",
+        f"New params    {metrics.new_parameters:>9}",
+        "```",
+    ])
+
+    embed = {
+        "title": "\U0001f50d Active Parameter Discovery Completed",
+        "description": "\n".join([
+            f"**Program:** {program_name}",
+            f"**Scope:** `{scope_target}`",
+            "",
+            f"**Assets Scanned:** {metrics.assets_scanned:,}",
+            f"**New Parameters:** {metrics.new_parameters:,}",
+            f"**Unique Parameters:** {metrics.total_parameters:,}",
+            f"**Duration:** {duration_str}",
+            "",
+            "**Tool breakdown (raw parameters):**",
+            tool_block,
+        ]),
+        "color": color,
+    }
+    payload = {"embeds": [embed]}
+
+    try:
+        _send_webhook(resolved_url, json.dumps(payload).encode("utf-8"))
+        logger.info("Discord parameter discovery notification sent: %s/%s",
+                    program_name, scope_target)
+        return True
+    except HTTPError as exc:
+        logger.warning("Discord webhook HTTP error %s %s", exc.code, exc.reason)
+    except URLError as exc:
+        logger.warning("Discord webhook URL error: %s", exc.reason)
+    except Exception as exc:
+        logger.warning("Discord parameter discovery notification failed: %s", exc)
+    return False
+
+
+# ------------------------------------------------------------------ #
 # Celery async wrapper (kept for backward compat)                       #
 # ------------------------------------------------------------------ #
 

@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { endpointsApi, ENDPOINT_TOOLS } from '../api/endpoints'
+import { HUNT_CATEGORIES, categorize } from '../lib/huntCategories'
 
 const PAGE_SIZE = 25
+// Max rows pulled for client-side hunting categorization (API hard cap).
+const HUNT_SAMPLE_LIMIT = 10000
 
 function formatDate(value) {
   if (!value) return '—'
@@ -61,6 +64,13 @@ export default function EndpointExplorer({ scopeId, subdomainId, subdomainLabel 
   const [error, setError] = useState(null)
   const debounceRef = useRef(null)
 
+  // ---- Hunt (category) state — mirrors the Content Discovery (URLs) page ----
+  const [showHunt, setShowHunt] = useState(true)
+  const [activeCat, setActiveCat] = useState('') // '' = no category filter
+  const [sample, setSample] = useState([]) // broad slice for client-side categorization
+  const [sampleLoading, setSampleLoading] = useState(false)
+  const [sampleTruncated, setSampleTruncated] = useState(false)
+
   // Host filter values (scope mode only).
   const [hosts, setHosts] = useState([])
   useEffect(() => {
@@ -118,9 +128,81 @@ export default function EndpointExplorer({ scopeId, subdomainId, subdomainLabel 
     setPage(0)
   }, [hostFilter, toolFilter, sortBy, sortDir])
 
-  const total = data.total || 0
+  // ---- Load a broad sample for client-side hunting categorization ----
+  // Reloads whenever the scope/subdomain/host/tool/search changes (NOT on page
+  // change — categorization is over the whole filtered result set, not one page).
+  useEffect(() => {
+    let active = true
+    setSampleLoading(true)
+    const opts = {
+      offset: 0,
+      limit: HUNT_SAMPLE_LIMIT,
+      search: debounced || undefined,
+      tool: toolFilter || undefined,
+    }
+    const req = subdomainMode
+      ? endpointsApi.bySubdomain(subdomainId, opts)
+      : endpointsApi.byScope(scopeId, { ...opts, host: hostFilter || undefined })
+    req
+      .then((res) => {
+        if (!active) return
+        const items = res?.items || []
+        setSample(items)
+        setSampleTruncated((res?.total || 0) > items.length)
+      })
+      .catch(() => {
+        if (active) {
+          setSample([])
+          setSampleTruncated(false)
+        }
+      })
+      .finally(() => active && setSampleLoading(false))
+    return () => {
+      active = false
+    }
+  }, [scopeId, subdomainId, subdomainMode, debounced, hostFilter, toolFilter])
+
+  // Categorize the sample once → counts per category + a matcher for the active one.
+  // Endpoints are always URL-like (never JS files), so isJs is false.
+  const { counts, matches } = useMemo(
+    () => categorize(sample, { isJs: false }),
+    [sample],
+  )
+
+  // Categories that actually have matches, ordered by count desc (most useful first).
+  const presentCategories = useMemo(
+    () =>
+      HUNT_CATEGORIES.filter((c) => counts[c.id] > 0).sort(
+        (a, b) => counts[b.id] - counts[a.id],
+      ),
+    [counts],
+  )
+
+  // When a category is active, results are filtered + paginated client-side over
+  // the sample. Otherwise we use the server-paginated `data`.
+  const catMatches = useMemo(
+    () => (activeCat ? matches(activeCat) : null),
+    [activeCat, matches],
+  )
+
+  // Clear the active category when filters invalidate it.
+  useEffect(() => {
+    if (activeCat && counts[activeCat] === 0) setActiveCat('')
+  }, [counts, activeCat])
+
+  // Reset paging when the active category changes.
+  useEffect(() => {
+    setPage(0)
+  }, [activeCat])
+
+  // When a category is active, page over the client-filtered matches; otherwise
+  // use the server-paginated data.
+  const catActive = Boolean(activeCat) && Array.isArray(catMatches)
+  const total = catActive ? catMatches.length : data.total || 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const rows = data.items || []
+  const rows = catActive
+    ? catMatches.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+    : data.items || []
 
   const toggleSort = (key) => {
     if (sortBy === key) {
@@ -201,7 +283,62 @@ export default function EndpointExplorer({ scopeId, subdomainId, subdomainLabel 
           </button>
         )}
 
-        <span className="muted cd-count">{total.toLocaleString()} endpoints</span>
+        <span className="muted cd-count">
+          {total.toLocaleString()} endpoints
+          {catActive && (
+            <span className="muted">
+              {' '}· {HUNT_CATEGORIES.find((c) => c.id === activeCat)?.label}
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/* ---- Hunt: category suggestion chips (computed from loaded data) ---- */}
+      <div className="cd-hunt">
+        <button
+          type="button"
+          className="cd-hunt-toggle"
+          onClick={() => setShowHunt((s) => !s)}
+          aria-expanded={showHunt}
+        >
+          🎯 Hunt {showHunt ? '▾' : '▸'}
+          {sampleTruncated && (
+            <span className="muted cd-hunt-note"> (first {HUNT_SAMPLE_LIMIT.toLocaleString()})</span>
+          )}
+        </button>
+        {showHunt && (
+          <div className="cd-chips">
+            {sampleLoading && presentCategories.length === 0 ? (
+              <span className="muted">Analyzing…</span>
+            ) : presentCategories.length === 0 ? (
+              <span className="muted">No category matches in the loaded data.</span>
+            ) : (
+              <>
+                {activeCat && (
+                  <button
+                    type="button"
+                    className="cd-chip cd-chip-clear"
+                    onClick={() => setActiveCat('')}
+                  >
+                    ✕ Clear
+                  </button>
+                )}
+                {presentCategories.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    title={c.hint}
+                    className={`cd-chip${activeCat === c.id ? ' active' : ''}`}
+                    onClick={() => setActiveCat((cur) => (cur === c.id ? '' : c.id))}
+                  >
+                    {c.label}
+                    <span className="cd-chip-count">{counts[c.id].toLocaleString()}</span>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -213,13 +350,15 @@ export default function EndpointExplorer({ scopeId, subdomainId, subdomainLabel 
         </div>
       )}
 
-      {loading ? (
+      {(catActive ? sampleLoading : loading) ? (
         <p className="muted panel-empty">Loading…</p>
       ) : rows.length === 0 ? (
         <p className="muted panel-empty">
-          {debounced || hostFilter || toolFilter
-            ? 'No endpoints match these filters.'
-            : 'No endpoints discovered yet. Run a JS endpoint scan.'}
+          {catActive
+            ? 'No endpoints match this category.'
+            : debounced || hostFilter || toolFilter
+              ? 'No endpoints match these filters.'
+              : 'No endpoints discovered yet. Run a JS endpoint scan.'}
         </p>
       ) : (
         <div className="table-scroll">
@@ -286,7 +425,7 @@ export default function EndpointExplorer({ scopeId, subdomainId, subdomainLabel 
           <button
             type="button"
             className="btn btn-sm"
-            disabled={page === 0 || loading}
+            disabled={page === 0 || (catActive ? sampleLoading : loading)}
             onClick={() => setPage((p) => Math.max(0, p - 1))}
           >
             ← Prev
@@ -297,7 +436,7 @@ export default function EndpointExplorer({ scopeId, subdomainId, subdomainLabel 
           <button
             type="button"
             className="btn btn-sm"
-            disabled={page >= totalPages - 1 || loading}
+            disabled={page >= totalPages - 1 || (catActive ? sampleLoading : loading)}
             onClick={() => setPage((p) => p + 1)}
           >
             Next →

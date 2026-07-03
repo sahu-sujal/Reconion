@@ -164,6 +164,17 @@ class JsSecretWorker(BaseWorker):
                 metrics=metrics, duration_seconds=duration,
             )
 
+            # ---- Chain: active parameter discovery (Phase 6.4) --------- #
+            # Runs on the classified dynamic assets; independent of secret data.
+            # Failure here must not abort this scan.
+            try:
+                self._chain_parameter_discovery(db, program.id, scope.id)
+            except Exception as chain_exc:
+                self.logger.warning(
+                    "Failed to chain parameter discovery after secret scan %s: %s",
+                    scan_run_id, chain_exc,
+                )
+
         except Exception as exc:
             self.logger.exception("JS secret scan %s failed: %s", scan_run_id, exc)
             self.mark_failed(scan_run_id, str(exc))
@@ -182,7 +193,6 @@ class JsSecretWorker(BaseWorker):
     def _process_batch(self, db, program, scope, host_map, tools, available,
                        batch, now, metrics, tool_raw_counts, sec_raw) -> None:
         js_items = [(url, jid) for jid, url, _ in batch]
-        js_urls = [url for _, url, _ in batch]
 
         with JsDownloadManager() as dl:
             downloaded, failed = dl.download_batch(js_items)
@@ -190,14 +200,20 @@ class JsSecretWorker(BaseWorker):
             if failed:
                 self.logger.info("JS batch: %d downloaded, %d failed",
                                  len(downloaded), len(failed))
-            if not downloaded and not js_urls:
+            if not downloaded:
+                # Nothing fetched — every URL was dead. Skip the scanners entirely
+                # instead of making Mantra/Nuclei re-prove the same 404s.
                 return
 
             # (local_path, js_url) pairs for file-based scanners (SecretFinder).
             local_files = [(d.path, d.url) for d in downloaded]
+            # URL-based scanners (Mantra, Nuclei) only see URLs we already proved
+            # downloadable — no wasted network on dead/blocked URLs, and each JS is
+            # never fetched more than the tools that actually need to re-fetch it.
+            live_urls = [d.url for d in downloaded]
             metrics.js_processed += len(downloaded)
 
-            per_tool = self._run_scanners(tools, available, local_files, js_urls,
+            per_tool = self._run_scanners(tools, available, local_files, live_urls,
                                           metrics, tool_raw_counts)
             merged = self._merge(per_tool, scope.target)
 
@@ -205,9 +221,14 @@ class JsSecretWorker(BaseWorker):
         if merged:
             self._persist_secrets(db, program, scope, host_map, merged, now, metrics)
 
-    def _run_scanners(self, tools, available, local_files, js_urls,
+    def _run_scanners(self, tools, available, local_files, live_urls,
                       metrics, tool_raw_counts) -> dict[str, list]:
-        """Run every available scanner in parallel. Returns {tool: [RawSecret]}."""
+        """Run every available scanner in parallel. Returns {tool: [RawSecret]}.
+
+        ``live_urls`` are only the URLs that downloaded successfully this batch, so
+        the URL-based scanners (Mantra/Nuclei) never waste time re-fetching dead
+        ones.
+        """
         results: dict[str, list] = {}
 
         def _run(name: str):
@@ -216,9 +237,9 @@ class JsSecretWorker(BaseWorker):
             if name == SECRETFINDER:
                 found = tool.run(local_files)
             else:  # Mantra / Nuclei take URLs
-                found = tool.run(js_urls)
+                found = tool.run(live_urls)
             self.logger.info("Tool=%s inputs=%d raw_secrets=%d status=SUCCESS time=%dms",
-                             name, len(local_files) if name == SECRETFINDER else len(js_urls),
+                             name, len(local_files) if name == SECRETFINDER else len(live_urls),
                              len(found), int((time.monotonic() - t0) * 1000))
             return name, found
 
@@ -439,6 +460,25 @@ class JsSecretWorker(BaseWorker):
         program = self.program_service.get_program(db=db, program_id=scan_run.program_id)
         scope = self.scope_service.get_scope(db=db, scope_id=scan_run.scope_id)
         return scan_run, program, scope
+
+    def _chain_parameter_discovery(self, db, program_id: uuid.UUID, scope_id: uuid.UUID) -> None:
+        """Create a PARAMETER_DISCOVERY ScanRun and enqueue it (Phase 6.4)."""
+        from backend.services.scan_run_service import ScanRunService
+        from database.models.enums import ScanStatus, ScanType
+
+        svc = ScanRunService()
+        param_scan = svc.create_scan_run(
+            db=db, program_id=program_id, scope_id=scope_id,
+            scan_type=ScanType.PARAMETER_DISCOVERY.value,
+            worker_name="parameter_discovery_worker",
+            status=ScanStatus.PENDING.value,
+        )
+        celery_app.send_task(
+            "workers.parameter_discovery_worker.run_parameter_discovery_scan",
+            args=[str(param_scan.id)], countdown=2,
+        )
+        self.logger.info("Chained parameter discovery scan %s for scope %s",
+                         param_scan.id, scope_id)
 
 
 @celery_app.task(name="workers.js_secret_worker.run_js_secret_scan", bind=True)

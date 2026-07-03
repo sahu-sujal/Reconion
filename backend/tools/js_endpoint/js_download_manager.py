@@ -67,8 +67,8 @@ class JsDownloadManager:
 
     def __init__(
         self,
-        timeout: int = 20,
-        retries: int = 2,
+        timeout: int = int(os.getenv("JS_DOWNLOAD_TIMEOUT", "20")),
+        retries: int = int(os.getenv("JS_DOWNLOAD_RETRIES", "2")),
         user_agent: str = _DEFAULT_USER_AGENT,
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> None:
@@ -142,6 +142,10 @@ class JsDownloadManager:
                 return target
             except HTTPError as exc:
                 last_err = exc
+                # An HTTPError is an open response object holding a socket — it
+                # must be closed or the FD leaks. With hundreds of 4xx per batch
+                # this exhausts the process FD limit ([Errno 24]) within minutes.
+                exc.close()
                 target.unlink(missing_ok=True)
                 if exc.code in _PERMANENT_HTTP_STATUS:
                     break  # will never succeed — don't retry

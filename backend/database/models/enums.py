@@ -54,6 +54,7 @@ class ScanType(str, enum.Enum):
     CONTENT_DISCOVERY = "CONTENT_DISCOVERY"
     JS_ENDPOINT = "JS_ENDPOINT"
     JS_SECRET = "JS_SECRET"
+    PARAMETER_DISCOVERY = "PARAMETER_DISCOVERY"
     TECHNOLOGY = "TECHNOLOGY"
     SCREENSHOT = "SCREENSHOT"
 
@@ -155,6 +156,51 @@ class SecretType(str, enum.Enum):
     ELASTICSEARCH_URI = "ELASTICSEARCH_URI"
     WEBHOOK = "WEBHOOK"
     BASIC_AUTH = "BASIC_AUTH"
+    UNKNOWN = "UNKNOWN"
+
+
+class ParameterTool(str, enum.Enum):
+    """Active parameter-discovery tools (Phase 6.4).
+
+    New tools (PARAMMINER, CUSTOM_DICTIONARY, AI_PARAM, …) can be appended and
+    wired into the worker without any schema change — ``discovery_tools`` on
+    ``parameters`` is a free-form JSON array of these labels.
+    """
+
+    ARJUN = "ARJUN"
+    PARAMSPIDER = "PARAMSPIDER"
+
+
+class ParameterAssetType(str, enum.Enum):
+    """Which inventory table a parameter's originating asset lives in (Phase 6.4)."""
+
+    URL = "URL"
+    ENDPOINT = "ENDPOINT"
+
+
+class ParameterType(str, enum.Enum):
+    """Canonical parameter categories (Phase 6.4).
+
+    Stored as a plain string on ``parameters`` so new types can be added in
+    :mod:`tools.common.parameter_utils` without a migration. ``UNKNOWN`` is the
+    catch-all. Kept in lock-step with ``PARAMETER_TYPE_META`` in that module.
+    """
+
+    IDENTIFIER = "IDENTIFIER"
+    PAGINATION = "PAGINATION"
+    SORTING = "SORTING"
+    REDIRECT = "REDIRECT"
+    URL = "URL"
+    CALLBACK = "CALLBACK"
+    FILE = "FILE"
+    FILESYSTEM = "FILESYSTEM"
+    COMMAND = "COMMAND"
+    AUTHENTICATION = "AUTHENTICATION"
+    CREDENTIAL = "CREDENTIAL"
+    IDENTITY = "IDENTITY"
+    SEARCH = "SEARCH"
+    LOCALIZATION = "LOCALIZATION"
+    OAUTH = "OAUTH"
     UNKNOWN = "UNKNOWN"
 
 

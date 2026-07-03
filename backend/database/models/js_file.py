@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    BigInteger,
     DateTime,
     ForeignKey,
     Index,
@@ -16,7 +17,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base
-from database.models.mixins import TimestampMixin, UUIDMixin
+from database.models.mixins import AssetClassificationMixin, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from database.models.host import Host
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from database.models.scope import Scope
 
 
-class JsFile(Base, UUIDMixin, TimestampMixin):
+class JsFile(Base, UUIDMixin, TimestampMixin, AssetClassificationMixin):
     """A discovered JavaScript asset (Phase 5 — Content Discovery).
 
     Deduplicated on ``(scope_id, url)``; per-tool attribution lives in
@@ -62,6 +63,9 @@ class JsFile(Base, UUIDMixin, TimestampMixin):
     filename: Mapped[str | None] = mapped_column(String(512), nullable=True)
     directory: Mapped[str | None] = mapped_column(Text, nullable=True)
     extension: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Size in bytes when known (from a discovery tool that reported it); shown in
+    # the Asset Explorer JavaScript category. NULL when unknown — never fetched.
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     source: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     first_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
