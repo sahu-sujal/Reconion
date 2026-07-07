@@ -63,7 +63,11 @@ from tools.parameters.paramspider import ParamSpiderRunner
 from workers.base.base_worker import BaseWorker
 
 # How many dynamic assets to hand each tool per batch (bounds memory + tool time).
-ASSET_BATCH_SIZE = int(os.getenv("PARAM_ASSET_BATCH_SIZE", "200"))
+# Arjun probes each URL with a wordlist (thousands of params → dozens of HTTP
+# requests per URL) under a rate limit, so a URL can take several seconds. Keep
+# the batch small enough that Arjun finishes a batch within ARJUN_TIMEOUT — a
+# timed-out batch discards ALL its results. 30 URLs × GET+POST is a safe default.
+ASSET_BATCH_SIZE = int(os.getenv("PARAM_ASSET_BATCH_SIZE", "30"))
 DB_BATCH_SIZE = 5_000
 
 ARJUN = "ARJUN"
@@ -476,7 +480,7 @@ class ParameterDiscoveryWorker(BaseWorker):
         body, DB schema and APIs need no change.
         """
         return {
-            ARJUN: ArjunRunner(timeout=int(os.getenv("ARJUN_TIMEOUT", "600"))),
+            ARJUN: ArjunRunner(timeout=int(os.getenv("ARJUN_TIMEOUT", "1200"))),
             PARAMSPIDER: ParamSpiderRunner(timeout=int(os.getenv("PARAMSPIDER_TIMEOUT", "600"))),
         }
 

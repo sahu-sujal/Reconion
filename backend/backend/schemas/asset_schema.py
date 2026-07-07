@@ -35,6 +35,7 @@ class AssetResponse(BaseModel):
     is_archive: bool = False
     is_configuration: bool = False
     is_backup: bool = False
+    is_credential: bool = False
     discovery_source: str | None = None
     first_seen: datetime | None = None
     last_seen: datetime | None = None

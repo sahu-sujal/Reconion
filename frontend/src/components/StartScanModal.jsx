@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { GlobeIcon, RadarIcon, PulseIcon, SearchIcon } from './icons'
 
 // The pipeline runs sequentially: SUBDOMAIN → DNS → HTTP → CONTENT_DISCOVERY →
-// JS_ENDPOINT. Each stage chains the next on the backend, so picking an earlier
-// stage runs everything after it too.
+// JS_ENDPOINT → JS_SECRET → PARAMETER_DISCOVERY. Each stage chains the next on
+// the backend, so picking an earlier stage runs everything after it too.
 const STAGES = [
   {
     type: 'SUBDOMAIN',
@@ -43,9 +43,16 @@ const STAGES = [
   {
     type: 'JS_SECRET',
     label: 'JS secret discovery',
-    desc: 'Scan discovered JS files for secrets/keys (SecretFinder, Mantra, Nuclei exposures). Reprocesses stored JS files. Final stage.',
+    desc: 'Scan discovered JS files for secrets/keys (SecretFinder, Mantra, Nuclei exposures). Chains parameter discovery after.',
     Icon: SearchIcon,
     step: 6,
+  },
+  {
+    type: 'PARAMETER_DISCOVERY',
+    label: 'Parameter discovery',
+    desc: 'Discover hidden HTTP parameters on dynamic assets only (Arjun, ParamSpider). Reuses the classified inventory — no re-crawl. Final stage.',
+    Icon: SearchIcon,
+    step: 7,
   },
 ]
 
@@ -69,27 +76,28 @@ export default function StartScanModal({ target, busy, activeScan, onStart, onCl
           </div>
         )}
 
-        <div className="stage-list">
+        <div className="stage-grid">
           {STAGES.map(({ type, label, desc, Icon, step }) => (
             <button
               key={type}
               type="button"
-              className={`stage-option${selected === type ? ' selected' : ''}`}
+              className={`stage-card${selected === type ? ' selected' : ''}`}
               onClick={() => setSelected(type)}
               aria-pressed={selected === type}
+              title={desc}
             >
               <span className="stage-step">{step}</span>
               <span className="stage-icon">
                 <Icon width={18} height={18} />
               </span>
-              <span className="stage-text">
-                <span className="stage-label">{label}</span>
-                <span className="stage-desc">{desc}</span>
-              </span>
-              <span className="stage-radio" />
+              <span className="stage-label">{label}</span>
             </button>
           ))}
         </div>
+
+        <p className="stage-hint">
+          {STAGES.find((s) => s.type === selected)?.desc}
+        </p>
 
         <div className="form-actions">
           <button

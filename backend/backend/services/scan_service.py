@@ -55,6 +55,10 @@ class ScanService:
             "workers.js_secret_worker.run_js_secret_scan",
             "js_secret_worker",
         ),
+        ScanType.PARAMETER_DISCOVERY.value: (
+            "workers.parameter_discovery_worker.run_parameter_discovery_scan",
+            "parameter_discovery_worker",
+        ),
     }
 
     def start_scan(

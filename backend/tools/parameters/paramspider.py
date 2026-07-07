@@ -30,11 +30,15 @@ from tools.parameters.parameter_tool_base import ParameterToolBase, RawParameter
 class ParamSpiderRunner(ParameterToolBase):
     """Discover parameters from archived URLs for a domain using ParamSpider."""
 
-    def __init__(self, timeout: int = 600, level: int | None = None) -> None:
+    def __init__(self, timeout: int = 600, level: int | None = None,
+                 subs: bool = True) -> None:
         super().__init__(timeout=timeout)
         self._bin = resolve_tool("paramspider")
         # Crawl "level" controls subdomain inclusion; env-tunable.
         self._level = level if level is not None else int(os.getenv("PARAMSPIDER_LEVEL", "2"))
+        # `--subs` also mines archived URLs for the domain's subdomains.
+        self._subs = subs if subs is not None else (
+            os.getenv("PARAMSPIDER_SUBS", "true").lower() in ("1", "true"))
 
     @property
     def tool_name(self) -> str:
@@ -91,30 +95,58 @@ class ParamSpiderRunner(ParameterToolBase):
         return merged
 
     def _run_domain(self, domain: str) -> list[RawParameter]:
-        with tempfile.TemporaryDirectory(prefix="paramspider_") as tmp:
-            out_path = Path(tmp) / f"{domain}.txt"
-            cmd = [
-                self._bin,
-                "-d", domain,
-                "-l", str(self._level),
-                "-o", str(out_path),
-            ]
-            result = run_command(cmd, timeout=self.timeout)
-            if result.timed_out:
-                raise RuntimeError(f"paramspider timed out after {self.timeout}s for {domain}")
+        # This ParamSpider build (devanshbatham) takes only -d/-l/-s/--proxy/-p
+        # and writes results/<domain>.txt; -s also streams URLs to stdout, which
+        # we capture. Flags are added only if the installed build advertises them
+        # (older/newer forks differ — probing keeps the wrapper portable).
+        supported = self._supported_flags()
+        cmd = [self._bin, "-d", domain]
+        if "-s" in supported:
+            cmd.append("-s")                 # stream URLs to stdout (we parse it)
+        if self._subs and "--subs" in supported:
+            cmd.append("--subs")             # include subdomains (only if supported)
+        elif self._subs and "-s" in supported and "--subs" not in supported:
+            pass  # this build folds subdomain data into the archive query already
+        if "-l" in supported:
+            cmd += ["-l", str(self._level)]
 
-            # Newer ParamSpider writes to the -o path; older builds default to
-            # results/<domain>.txt — check both.
-            candidates = [out_path, Path("results") / f"{domain}.txt"]
-            for path in candidates:
-                if path.is_file():
-                    try:
-                        raw = path.read_text(encoding="utf-8", errors="ignore")
-                    except OSError:
-                        continue
-                    return self.parse_output(raw)
-            # Some builds print to stdout instead of a file.
-            return self.parse_output(result.stdout)
+        result = run_command(cmd, timeout=self.timeout)
+        if result.timed_out:
+            raise RuntimeError(f"paramspider timed out after {self.timeout}s for {domain}")
+
+        # Prefer the results/<domain>.txt file; fall back to captured stdout.
+        params = self.parse_output(result.stdout)
+        out_file = Path("results") / f"{domain}.txt"
+        if out_file.is_file():
+            try:
+                file_params = self.parse_output(
+                    out_file.read_text(encoding="utf-8", errors="ignore"))
+                # Merge (file is authoritative + complete); dedup handled downstream.
+                if len(file_params) > len(params):
+                    params = file_params
+            except OSError:
+                pass
+        return params
+
+    @staticmethod
+    def _supported_flags() -> set[str]:
+        """Return the set of CLI flags the installed ParamSpider advertises."""
+        from functools import lru_cache
+
+        @lru_cache(maxsize=1)
+        def _probe() -> frozenset[str]:
+            try:
+                res = run_command([resolve_tool("paramspider"), "--help"], timeout=15)
+                text = (res.stdout or "") + (res.stderr or "")
+            except Exception:
+                return frozenset({"-d", "-s"})
+            flags = set()
+            for tok in ("-d", "-l", "-s", "--subs", "--proxy", "-p", "-o"):
+                if tok in text:
+                    flags.add(tok)
+            return frozenset(flags or {"-d", "-s"})
+
+        return set(_probe())
 
     @staticmethod
     def _domains_of(targets: list[str]) -> list[str]:

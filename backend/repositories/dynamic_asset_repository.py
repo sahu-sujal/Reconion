@@ -39,13 +39,47 @@ class DynamicAsset:
 
 
 class DynamicAssetRepository:
-    """Stream the dynamic subset of the asset inventory for a scope."""
+    """Stream the parameter-discovery target subset of the inventory for a scope.
 
-    # The dynamic-asset predicate (alias-qualified). Kept identical across
-    # urls/endpoints so the routing rule is defined in exactly one place.
-    @staticmethod
-    def _dynamic_predicate(alias: str) -> str:
-        return f"({alias}.is_dynamic = true OR {alias}.is_api = true)"
+    Routing policy (denylist): run parameter discovery on **every non-static**
+    URL/endpoint — skip only static resources that can't accept parameters.
+    Excluded by extension: js, css, json, pdf, txt (plus the obvious static/binary
+    kinds — images, fonts, media, archives, maps). Excluded by category: the
+    static-file categories (JAVASCRIPT, STYLESHEET, IMAGE, FONT, VIDEO, AUDIO,
+    DOCUMENT, ARCHIVE). Everything else — web pages, APIs, dynamic pages,
+    auth/admin, documentation, unknown, extension-less routes — is a target.
+    """
+
+    # Extensions that never accept meaningful HTTP parameters — skip them.
+    _EXCLUDED_EXTENSIONS = (
+        # Explicitly requested exclusions.
+        "js", "mjs", "cjs", "css", "json", "pdf", "txt",
+        # Other clearly-static / binary types (no parameter surface).
+        "map", "png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp", "avif",
+        "tiff", "woff", "woff2", "ttf", "otf", "eot",
+        "mp4", "webm", "mov", "avi", "mkv", "m3u8",
+        "mp3", "wav", "ogg", "flac", "aac", "m4a",
+        "zip", "rar", "tar", "gz", "tgz", "7z", "bz2", "xz",
+    )
+
+    # Categories whose assets are static files — never parameter targets.
+    _EXCLUDED_CATEGORIES = (
+        "JAVASCRIPT", "STYLESHEET", "IMAGE", "FONT", "VIDEO", "AUDIO", "ARCHIVE",
+    )
+
+    def _target_predicate(self, alias: str) -> str:
+        """Denylist predicate: keep everything that is NOT a static resource."""
+        exts = ", ".join(f"'{e}'" for e in self._EXCLUDED_EXTENSIONS)
+        cats = ", ".join(f"'{c}'" for c in self._EXCLUDED_CATEGORIES)
+        return (
+            f"(({alias}.extension IS NULL OR lower({alias}.extension) NOT IN ({exts})) "
+            f"AND ({alias}.asset_category IS NULL OR {alias}.asset_category NOT IN ({cats})) "
+            f"AND {alias}.is_static = false)"
+        )
+
+    # Backwards-compatible alias — the routing predicate is now a denylist.
+    def _dynamic_predicate(self, alias: str) -> str:
+        return self._target_predicate(alias)
 
     def count_dynamic(self, db: Session, scope_id: uuid.UUID) -> int:
         sql = f"""

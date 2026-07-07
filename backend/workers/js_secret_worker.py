@@ -45,6 +45,7 @@ from database.models.scan_run import ScanRun
 from repositories.host_repository import HostRepository
 from repositories.js_file_repository import JsFileRepository
 from repositories.js_secret_repository import JsSecretRepository
+from repositories.js_source_repository import JsSourceRepository
 from repositories.subdomain_repository import SubdomainRepository
 from repositories.tool_execution_repository import ToolExecutionRepository
 from tools.common.scope_filter import host_of_url, is_host_in_scope
@@ -90,6 +91,7 @@ class JsSecretWorker(BaseWorker):
         self.storage_service = StorageService()
         self.secret_repo = JsSecretRepository()
         self.js_repo = JsFileRepository()
+        self.js_source_repo = JsSourceRepository()
         self.host_repo = HostRepository()
         self.subdomain_repo = SubdomainRepository()
         self.tool_execution_repo = ToolExecutionRepository()
@@ -115,8 +117,14 @@ class JsSecretWorker(BaseWorker):
             sec_raw = self.storage_service.get_raw_path_by_id(program.id, scope.id, "secrets")
             sec_proc = self.storage_service.get_processed_path_by_id(program.id, scope.id, "secrets")
 
-            metrics.js_total = self.js_repo.count_scope_js(db, scope.id)
-            self.logger.info("JS secret discovery: %d JS files in scope %s",
+            # Scan the FULL JavaScript surface of the scope: js_files + every
+            # url/endpoint the classifier tagged as JAVASCRIPT (.js/.mjs/.cjs),
+            # deduplicated by URL. This mirrors the manual
+            # "grep '\\.js$' allurls | curl | grep secrets" recon flow but sourced
+            # from the classified inventory, so JS URLs that never became js_files
+            # rows are scanned too.
+            metrics.js_total = self.js_source_repo.count_scope_js_urls(db, scope.id)
+            self.logger.info("JS secret discovery: %d JS URLs (js_files + url/endpoint JS) in scope %s",
                              metrics.js_total, scope.id)
             if metrics.js_total == 0:
                 self._update_scan_metrics(db, scan_run.id, metrics, tool_raw_counts)
@@ -132,11 +140,13 @@ class JsSecretWorker(BaseWorker):
 
             now = datetime.now(timezone.utc)
 
+            # (synthetic_id, js_url, host_id) — the id is only a per-URL download
+            # label; secrets store js_file_id=NULL and link by js_file_url.
             batch: list[tuple[uuid.UUID, str, uuid.UUID | None]] = []
-            for js_id, js_url, js_host_id in self.js_repo.iter_scope_js(
+            for js_url, js_host_id in self.js_source_repo.iter_scope_js_urls(
                 db, scope.id, batch_size=JS_BATCH_SIZE
             ):
-                batch.append((js_id, js_url, js_host_id))
+                batch.append((uuid.uuid4(), js_url, js_host_id))
                 if len(batch) >= JS_BATCH_SIZE:
                     self._process_batch(db, program, scope, host_map, tools, available,
                                         batch, now, metrics, tool_raw_counts, sec_raw)

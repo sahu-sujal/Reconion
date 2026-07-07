@@ -1,0 +1,35 @@
+# Recon Automation Platform — Python dependencies
+# Generated from the project's backend/.venv (Python 3.14).
+# Install:  python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+#
+# Only the packages the platform actually imports are pinned here (a full
+# `pip freeze` of the venv also contained unrelated system tooling). Regenerate
+# curated pins after adding a dependency.
+
+# --- Web API ---
+fastapi==0.136.3
+uvicorn==0.49.0
+starlette==1.2.1
+pydantic==2.13.4
+pydantic-settings==2.12.1
+python-dotenv==1.2.2
+anyio==4.13.0
+httpx==0.28.1
+
+# --- Database / ORM / migrations ---
+SQLAlchemy==2.0.50
+alembic==1.18.4
+psycopg2-binary==2.9.12
+greenlet==3.5.1
+Mako==1.3.12
+
+# --- Task queue (Celery + broker/result via Redis) ---
+celery==5.6.3
+redis==8.0.0
+kombu==5.6.2
+billiard==4.2.4
+amqp==5.3.1
+click==8.4.1
+
+# --- Recon tooling (Python-based) ---
+arjun==2.2.7

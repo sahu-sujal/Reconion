@@ -94,26 +94,41 @@ class ScopeService:
         self,
         db: Session,
         scope_id: uuid.UUID,
-        scope_type: str | None = None,
-        priority: int | None = None,
-        is_active: bool | None = None,
-        notes: str | None = None,
+        changes: dict | None = None,
+        **kwargs,
     ) -> Scope:
+        """Apply a partial update to a scope.
+
+        ``changes`` is the set of fields the caller actually supplied (typically
+        ``ScopeUpdate.model_dump(exclude_unset=True)``). Only those keys are
+        touched, so an explicit ``notes=None`` clears the field while an omitted
+        ``notes`` leaves it unchanged. ``**kwargs`` is accepted for backward
+        compatibility with the old per-field call style.
+        """
+        # Merge legacy kwargs (drop unset None so they don't overwrite values).
+        updates = dict(changes or {})
+        for key, val in kwargs.items():
+            if val is not None:
+                updates[key] = val
+
         scope = self.get_scope(db, scope_id)
-        if scope_type is not None:
+
+        allowed_fields = {"scope_type", "priority", "is_active", "notes"}
+        unknown = set(updates) - allowed_fields
+        if unknown:
+            raise ValueError(f"Unknown scope field(s): {', '.join(sorted(unknown))}")
+
+        if "scope_type" in updates:
             allowed_scope_types = {stype.value for stype in ScopeType}
-            if scope_type not in allowed_scope_types:
-                raise ValueError(f"Invalid scope type: {scope_type}")
-            scope.scope_type = scope_type
-        if priority is not None:
-            scope.priority = priority
-        if is_active is not None:
-            scope.is_active = is_active
-        if notes is not None:
-            scope.notes = notes
+            if updates["scope_type"] not in allowed_scope_types:
+                raise ValueError(f"Invalid scope type: {updates['scope_type']}")
+
+        for field, value in updates.items():
+            setattr(scope, field, value)
+
         db.commit()
         db.refresh(scope)
-        logger.info("Scope updated: %s", scope.id)
+        logger.info("Scope updated: %s (fields: %s)", scope.id, ", ".join(sorted(updates)) or "none")
         return scope
 
     def get_scope_stats(self, db: Session, scope_id: uuid.UUID) -> dict[str, object]:
@@ -219,19 +234,8 @@ class ScopeService:
         # Workers write artifacts to the UUID-keyed tree
         # (storage/programs/{program_id}/scopes/{scope_id}/...); the legacy
         # name-based tree is also removed for backward compatibility.
-        try:
-            import shutil
+        from backend.services.storage_service import StorageService
 
-            from backend.services.storage_service import StorageService
-
-            storage = StorageService()
-            paths_to_remove = [storage.get_scope_path_by_id(program_id, scope_id)]
-            if program_name:
-                paths_to_remove.append(storage.get_scope_path(program_name, scope_target))
-
-            for scope_path in paths_to_remove:
-                if scope_path.exists():
-                    shutil.rmtree(scope_path)
-                    logger.info("Removed scope storage directory: %s", scope_path)
-        except Exception as exc:
-            logger.warning("Failed to remove scope storage directory: %s", exc)
+        StorageService().delete_scope_storage(
+            program_id, scope_id, program_name, scope_target
+        )

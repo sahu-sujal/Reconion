@@ -207,9 +207,18 @@ class ProgramService:
 
     def delete_program(self, db: Session, program_id: uuid.UUID) -> None:
         program = self.get_program(db, program_id)
+        # Capture the storage identifiers before the row (and its name) is gone.
+        program_name = program.name
+
         db.delete(program)
         db.commit()
         logger.info("Program deleted: %s", program_id)
+
+        # Remove the program's entire artifact tree (all scopes underneath) after
+        # the DB commit succeeds. A storage failure is logged, not raised.
+        from backend.services.storage_service import StorageService
+
+        StorageService().delete_program_storage(program_id, program_name)
 
 
 class ScanRunService:

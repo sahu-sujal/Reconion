@@ -40,6 +40,24 @@ def _table_exists(table: str) -> bool:
     ).scalar() is not None
 
 
+def _constraint_exists(constraint: str) -> bool:
+    return op.get_bind().execute(
+        sa.text("SELECT 1 FROM pg_constraint WHERE conname=:c"),
+        {"c": constraint},
+    ).fetchone() is not None
+
+
+# scan_type check-constraint value lists (kept in lock-step with ScanType).
+_SCAN_TYPES_WITH_PARAM = (
+    "'SUBDOMAIN', 'DNS', 'HTTP', 'PORT', 'URL', 'JS', 'CONTENT_DISCOVERY', "
+    "'JS_ENDPOINT', 'JS_SECRET', 'PARAMETER_DISCOVERY', 'TECHNOLOGY', 'SCREENSHOT'"
+)
+_SCAN_TYPES_WITHOUT_PARAM = (
+    "'SUBDOMAIN', 'DNS', 'HTTP', 'PORT', 'URL', 'JS', 'CONTENT_DISCOVERY', "
+    "'JS_ENDPOINT', 'JS_SECRET', 'TECHNOLOGY', 'SCREENSHOT'"
+)
+
+
 def upgrade() -> None:
     # ---- parameters ------------------------------------------------------- #
     if not _table_exists("parameters"):
@@ -117,8 +135,24 @@ def upgrade() -> None:
             op.add_column("scan_runs", sa.Column(
                 name, sa.Integer(), nullable=False, server_default="0"))
 
+    # ---- widen scan_type check constraint (add PARAMETER_DISCOVERY) -------- #
+    if _constraint_exists("ck_scan_runs_scan_type"):
+        op.drop_constraint("ck_scan_runs_scan_type", "scan_runs", type_="check")
+    op.create_check_constraint(
+        "ck_scan_runs_scan_type", "scan_runs",
+        f"scan_type IN ({_SCAN_TYPES_WITH_PARAM})",
+    )
+
 
 def downgrade() -> None:
+    # Revert the scan_type check constraint to its pre-6.4 value list.
+    if _constraint_exists("ck_scan_runs_scan_type"):
+        op.drop_constraint("ck_scan_runs_scan_type", "scan_runs", type_="check")
+    op.create_check_constraint(
+        "ck_scan_runs_scan_type", "scan_runs",
+        f"scan_type IN ({_SCAN_TYPES_WITHOUT_PARAM})",
+    )
+
     for name in (
         "arjun_count", "paramspider_count", "assets_scanned_count",
         "total_parameters_count", "new_parameters_count",

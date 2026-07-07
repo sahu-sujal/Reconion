@@ -51,6 +51,8 @@ DOCUMENT = "DOCUMENT"
 ARCHIVE = "ARCHIVE"
 # Configuration
 CONFIGURATION = "CONFIGURATION"
+# Credentials — certificates & private keys (highly sensitive)
+CREDENTIAL = "CREDENTIAL"
 # Logs & backups (sensitive)
 LOG_BACKUP = "LOG_BACKUP"
 # Path-pattern categories
@@ -78,6 +80,7 @@ TRAIT_FLAGS = (
     "is_archive",
     "is_configuration",
     "is_backup",
+    "is_credential",
 )
 
 
@@ -108,6 +111,7 @@ ASSET_CATEGORY_META: dict[str, CategoryMeta] = {
     DOCUMENT: CategoryMeta(DOCUMENT, "Documents", "Documents", frozenset({"is_document"})),
     ARCHIVE: CategoryMeta(ARCHIVE, "Archives", "Sensitive", frozenset({"is_archive"}), sensitive=True),
     CONFIGURATION: CategoryMeta(CONFIGURATION, "Configuration Files", "Sensitive", frozenset({"is_configuration"}), sensitive=True),
+    CREDENTIAL: CategoryMeta(CREDENTIAL, "Credentials & Keys", "Sensitive", frozenset({"is_credential"}), sensitive=True),
     LOG_BACKUP: CategoryMeta(LOG_BACKUP, "Logs & Backups", "Sensitive", frozenset({"is_backup"}), sensitive=True),
     AUTHENTICATION: CategoryMeta(AUTHENTICATION, "Authentication", "Interesting", frozenset({"is_dynamic"})),
     ADMINISTRATION: CategoryMeta(ADMINISTRATION, "Administration", "Interesting", frozenset({"is_dynamic"})),
@@ -180,28 +184,51 @@ _reg(DOCUMENT, {
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "txt": "text/plain", "csv": "text/csv", "rtf": "application/rtf",
     "odt": "application/vnd.oasis.opendocument.text",
+    "md": "text/markdown", "markdown": "text/markdown",
 })
-# Archives
+# Additional source-code / compiled artifacts (sensitive — server/app source).
+_reg(SCRIPT, {
+    "java": "text/x-java-source", "class": "application/java-vm",
+    "go": "text/x-go", "rs": "text/x-rust", "c": "text/x-c",
+    "cpp": "text/x-c++", "cs": "text/x-csharp",
+})
+# Archives (incl. Java deployables — highly sensitive)
 _reg(ARCHIVE, {
     "zip": "application/zip", "rar": "application/vnd.rar",
     "tar": "application/x-tar", "gz": "application/gzip",
     "tgz": "application/gzip", "7z": "application/x-7z-compressed",
+    "7zip": "application/x-7z-compressed",
     "bz2": "application/x-bzip2", "xz": "application/x-xz",
+    "jar": "application/java-archive", "war": "application/java-archive",
+    "ear": "application/java-archive",
 })
 # Configuration
 _reg(CONFIGURATION, {
     "env": "text/plain", "yaml": "application/yaml", "yml": "application/yaml",
     "json": "application/json", "xml": "application/xml", "ini": "text/plain",
     "conf": "text/plain", "toml": "application/toml", "properties": "text/plain",
-    "cfg": "text/plain",
+    "cfg": "text/plain", "config": "text/plain", "plist": "application/xml",
+    "gitignore": "text/plain",
 })
-# Logs & backups (sensitive)
+# Credentials — certificates & private keys (highly sensitive)
+_reg(CREDENTIAL, {
+    "pem": "application/x-pem-file", "key": "application/pkcs8",
+    "crt": "application/x-x509-ca-cert", "cer": "application/x-x509-ca-cert",
+    "csr": "application/pkcs10", "p12": "application/x-pkcs12",
+    "pfx": "application/x-pkcs12", "keystore": "application/octet-stream",
+    "jks": "application/octet-stream", "ppk": "application/octet-stream",
+})
+# Logs & backups + local databases + hashes/secrets (sensitive)
 _reg(LOG_BACKUP, {
     "log": "text/plain", "bak": "application/octet-stream", "old": "application/octet-stream",
     "sql": "application/sql", "db": "application/octet-stream",
     "sqlite": "application/vnd.sqlite3", "sqlite3": "application/vnd.sqlite3",
+    "sqlitedb": "application/vnd.sqlite3", "sqlcipher": "application/octet-stream",
+    "db3": "application/octet-stream", "dbf": "application/octet-stream",
+    "accdb": "application/msaccess", "mdb": "application/msaccess",
     "dump": "application/octet-stream", "backup": "application/octet-stream",
-    "swp": "application/octet-stream",
+    "swp": "application/octet-stream", "cache": "application/octet-stream",
+    "secret": "text/plain", "md5": "text/plain", "sha1": "text/plain",
 })
 
 
@@ -280,6 +307,7 @@ class Classification:
     is_archive: bool = False
     is_configuration: bool = False
     is_backup: bool = False
+    is_credential: bool = False
 
     def as_columns(self) -> dict:
         """Return the DB column dict for bulk update."""
@@ -296,6 +324,7 @@ class Classification:
             "is_archive": self.is_archive,
             "is_configuration": self.is_configuration,
             "is_backup": self.is_backup,
+            "is_credential": self.is_credential,
         }
 
 

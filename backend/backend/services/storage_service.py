@@ -162,6 +162,55 @@ class StorageService:
         return scope_path
 
     # ------------------------------------------------------------------
+    # Deletion — remove artifacts when a program / scope is deleted
+    # ------------------------------------------------------------------
+
+    def delete_scope_storage(
+        self,
+        program_id: _uuid_module.UUID | str,
+        scope_id: _uuid_module.UUID | str,
+        program_name: str | None = None,
+        scope_target: str | None = None,
+    ) -> list[Path]:
+        """Delete a scope's artifact directories (UUID tree + legacy name tree).
+
+        Returns the list of paths actually removed. Never raises — a filesystem
+        error is logged and skipped so a storage problem can't block the DB
+        delete.
+        """
+        candidates = [self.get_scope_path_by_id(program_id, scope_id)]
+        if program_name and scope_target:
+            candidates.append(self.get_scope_path(program_name, scope_target))
+        return self._remove_paths(candidates, kind="scope")
+
+    def delete_program_storage(
+        self,
+        program_id: _uuid_module.UUID | str,
+        program_name: str | None = None,
+    ) -> list[Path]:
+        """Delete a program's entire artifact tree (UUID tree + legacy name tree).
+
+        Removes ``storage/programs/{program_id}`` (all scopes underneath) plus the
+        legacy ``storage/projects/{program_name}`` tree. Never raises.
+        """
+        candidates = [self.get_program_path_by_id(program_id)]
+        if program_name:
+            candidates.append(self.get_program_path(program_name))
+        return self._remove_paths(candidates, kind="program")
+
+    def _remove_paths(self, paths: list[Path], *, kind: str) -> list[Path]:
+        removed: list[Path] = []
+        for path in paths:
+            try:
+                if path.exists():
+                    shutil.rmtree(path)
+                    removed.append(path)
+                    logger.info("Removed %s storage directory: %s", kind, path)
+            except Exception as exc:  # storage errors must not block DB deletes
+                logger.warning("Failed to remove %s storage directory %s: %s", kind, path, exc)
+        return removed
+
+    # ------------------------------------------------------------------
     # Legacy name-based API (kept for backward compat with Phase-3 worker)
     # ------------------------------------------------------------------
 

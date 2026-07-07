@@ -24,7 +24,8 @@ class ScanRun(Base, UUIDMixin, TimestampMixin):
     __table_args__ = (
         CheckConstraint(
             "scan_type IN ('SUBDOMAIN', 'DNS', 'HTTP', 'PORT', 'URL', 'JS', "
-            "'CONTENT_DISCOVERY', 'TECHNOLOGY', 'SCREENSHOT')",
+            "'CONTENT_DISCOVERY', 'JS_ENDPOINT', 'JS_SECRET', "
+            "'PARAMETER_DISCOVERY', 'TECHNOLOGY', 'SCREENSHOT')",
             name="ck_scan_runs_scan_type",
         ),
     )

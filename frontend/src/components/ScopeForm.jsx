@@ -39,11 +39,14 @@ export default function ScopeForm({ initial, onSubmit, onCancel, submitting }) {
     }
 
     // On edit the backend does not accept changing target, so omit it.
+    // `notes` may be null (an existing scope with no notes), so coerce before
+    // trimming — otherwise `null.trim()` throws and no request is ever sent.
+    const notes = (values.notes ?? '').trim() || null
     const payload = {
       scope_type: values.scope_type,
       priority: priorityNum,
       is_active: Boolean(values.is_active),
-      notes: values.notes.trim() || null,
+      notes,
     }
     if (!isEditing) {
       payload.target = values.target.trim()

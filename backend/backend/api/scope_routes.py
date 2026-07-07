@@ -93,15 +93,17 @@ def update_scope(
     payload: ScopeUpdate,
     db: Session = Depends(get_db),
 ) -> ScopeResponse:
-    """Update scope metadata."""
+    """Update scope metadata.
+
+    Only fields present in the request body are updated. This preserves the
+    distinction between "field omitted" (leave unchanged) and "field set to null"
+    (e.g. clearing ``notes``) — a plain None kwarg can't express that.
+    """
     try:
         return service.update_scope(
             db=db,
             scope_id=scope_id,
-            scope_type=payload.scope_type,
-            priority=payload.priority,
-            is_active=payload.is_active,
-            notes=payload.notes,
+            changes=payload.model_dump(exclude_unset=True),
         )
     except EntityNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

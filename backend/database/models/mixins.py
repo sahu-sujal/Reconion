@@ -91,3 +91,7 @@ class AssetClassificationMixin:
     @declared_attr
     def is_backup(cls) -> Mapped[bool]:  # noqa: N805
         return mapped_column(Boolean, nullable=False, default=False, server_default="false", index=True)
+
+    @declared_attr
+    def is_credential(cls) -> Mapped[bool]:  # noqa: N805
+        return mapped_column(Boolean, nullable=False, default=False, server_default="false", index=True)

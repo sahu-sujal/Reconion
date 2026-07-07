@@ -66,6 +66,10 @@ export default function ProgramDetailPage() {
   }
 
   function openEdit(scope, e) {
+    // Stop the click from bubbling to the card's navigate handler — otherwise
+    // React Router navigates to the scope page and instantly unmounts the modal,
+    // making the Edit button appear to do nothing.
+    e?.preventDefault()
     e?.stopPropagation()
     setEditing(scope)
     setShowForm(true)
@@ -231,34 +235,39 @@ export default function ProgramDetailPage() {
         <ul className="scope-grid">
           {scopes.map((scope) => (
             <li key={scope.id}>
-              {/* Clicking the card opens the scope dashboard (stats + scans).
-                  Edit/Delete are explicit buttons that stop propagation. */}
-              <div
-                className="scope-card"
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate(`/scopes/${scope.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') navigate(`/scopes/${scope.id}`)
-                }}
-              >
-                <div className="scope-card-top">
-                  <span className="scope-target">{scope.target}</span>
-                  <span className="badge badge-type">{scope.scope_type}</span>
-                </div>
+              {/* Only the card BODY navigates to the scope dashboard. The
+                  Edit/Delete buttons live OUTSIDE the navigable element, so a
+                  click on them can never trigger navigation (previously the
+                  whole card was clickable, and an Edit click navigated away
+                  before the modal could open). */}
+              <div className="scope-card">
+                <div
+                  className="scope-card-body"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/scopes/${scope.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') navigate(`/scopes/${scope.id}`)
+                  }}
+                >
+                  <div className="scope-card-top">
+                    <span className="scope-target">{scope.target}</span>
+                    <span className="badge badge-type">{scope.scope_type}</span>
+                  </div>
 
-                <div className="scope-tags">
-                  {scope.is_active ? (
-                    <span className="badge badge-active">active</span>
-                  ) : (
-                    <span className="badge badge-archived">inactive</span>
-                  )}
-                  <span className="scope-priority">
-                    Priority <strong>{scope.priority}</strong>
-                  </span>
-                </div>
+                  <div className="scope-tags">
+                    {scope.is_active ? (
+                      <span className="badge badge-active">active</span>
+                    ) : (
+                      <span className="badge badge-archived">inactive</span>
+                    )}
+                    <span className="scope-priority">
+                      Priority <strong>{scope.priority}</strong>
+                    </span>
+                  </div>
 
-                {scope.notes && <p className="scope-notes">{scope.notes}</p>}
+                  {scope.notes && <p className="scope-notes">{scope.notes}</p>}
+                </div>
 
                 <div className="scope-card-actions">
                   <button

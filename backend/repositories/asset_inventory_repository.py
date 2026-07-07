@@ -29,13 +29,13 @@ _SORTABLE = {
 # Boolean trait columns the caller may filter on (whitelist).
 _TRAIT_COLUMNS = frozenset({
     "is_static", "is_dynamic", "is_api", "is_document", "is_script",
-    "is_archive", "is_configuration", "is_backup", "has_parameters",
+    "is_archive", "is_configuration", "is_backup", "is_credential", "has_parameters",
 })
 
 _SELECT_COLUMNS = (
     "id, source_kind, program_id, scope_id, host, normalized_url, asset_category, "
     "extension, mime_type, has_parameters, parameter_count, is_static, is_dynamic, "
-    "is_api, is_document, is_script, is_archive, is_configuration, is_backup, "
+    "is_api, is_document, is_script, is_archive, is_configuration, is_backup, is_credential, "
     "discovery_source, first_seen, last_seen"
 )
 
