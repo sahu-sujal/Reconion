@@ -23,7 +23,7 @@ set -euo pipefail
 # --- Paths --------------------------------------------------------------------
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
-VENV_PY="$BACKEND_DIR/.venv/bin/python"
+VENV_PY="$ROOT_DIR/.venv/bin/python"
 LOG_DIR="$ROOT_DIR/logs"
 
 API_HOST="${API_HOST:-0.0.0.0}"
