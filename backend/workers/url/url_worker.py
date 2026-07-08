@@ -61,10 +61,10 @@ SRC_KATANA = "KATANA"
 SRC_HAKRAWLER = "HAKRAWLER"
 SRC_SUBJS = "SUBJS"
 
-# Temporarily disabled — waybackurls consistently times out at 1800s and
-# contributes 0 URLs. Flip back to True (or set ENABLE_WAYBACKURLS=1 in the
-# environment) to re-enable it once its performance is acceptable.
-ENABLE_WAYBACKURLS = os.getenv("ENABLE_WAYBACKURLS", "0") == "1"
+# Enabled by default. Historically it timed out at 1800s and contributed
+# 0 URLs on some targets; set ENABLE_WAYBACKURLS=0 in the environment to
+# turn it back off if that recurs.
+ENABLE_WAYBACKURLS = os.getenv("ENABLE_WAYBACKURLS", "1") == "1"
 
 
 @dataclass
