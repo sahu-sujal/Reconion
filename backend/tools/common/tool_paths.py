@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from functools import lru_cache
 from pathlib import Path
 
@@ -72,9 +73,16 @@ TOOLS_BIN: Path = TOOLS_DIR / "bin"
 # anything not bundled under tools/bin.
 _GO_BIN = Path.home() / "go" / "bin"
 
+# pip-installed console scripts (e.g. dnsgen) live in the active interpreter's
+# bin dir. When the worker is launched by a process manager that doesn't
+# "activate" the venv, this dir is absent from PATH even though the tool is
+# installed, so bare-name invocations fail with "not found". Add it explicitly.
+_VENV_BIN = Path(sys.executable).resolve().parent
+
 
 def ensure_tools_on_path() -> None:
-    """Prepend ``tools/bin`` (highest priority) then ``~/go/bin`` to ``PATH``.
+    """Prepend ``tools/bin`` (highest priority), then ``~/go/bin`` and the
+    active interpreter's ``bin`` (for pip console scripts) to ``PATH``.
 
     Idempotent: an entry already present in ``PATH`` is not added again. Safe to
     call from any wrapper's import; ``command_runner`` calls it once so bare-name
@@ -82,7 +90,7 @@ def ensure_tools_on_path() -> None:
     """
     current = os.environ.get("PATH", "").split(os.pathsep)
     # Add lowest-priority first so the last prepend (tools/bin) ends up first.
-    for entry in (str(_GO_BIN), str(TOOLS_BIN)):
+    for entry in (str(_VENV_BIN), str(_GO_BIN), str(TOOLS_BIN)):
         if entry and entry not in current:
             os.environ["PATH"] = entry + os.pathsep + os.environ.get("PATH", "")
             current = os.environ["PATH"].split(os.pathsep)
