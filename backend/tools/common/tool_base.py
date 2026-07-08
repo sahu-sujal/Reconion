@@ -10,7 +10,7 @@ class ToolBase(ABC):
     Timeout (seconds) can be customised per instance.
     """
 
-    def __init__(self, timeout: int = 120) -> None:
+    def __init__(self, timeout: int | None = 120) -> None:
         self.timeout = timeout
 
     @property

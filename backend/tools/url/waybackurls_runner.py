@@ -17,7 +17,7 @@ from tools.common.tool_base import ToolBase
 class WaybackurlsRunner(ToolBase):
     """Discover historical URLs for a set of hosts via waybackurls."""
 
-    def __init__(self, timeout: int = 1800) -> None:
+    def __init__(self, timeout: int | None = None) -> None:
         super().__init__(timeout=timeout)
 
     @property

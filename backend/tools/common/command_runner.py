@@ -24,10 +24,12 @@ class CommandResult:
 
 def run_command(
     command: list[str],
-    timeout: int,
+    timeout: int | None,
     stdin_data: str | None = None,
 ) -> CommandResult:
     """Execute *command* and return a structured result.
+
+    A *timeout* of ``None`` waits indefinitely until the command completes.
 
     Never raises for timeouts or non-zero exit codes — callers inspect
     :attr:`CommandResult.timed_out` and :attr:`CommandResult.returncode`.
@@ -59,11 +61,14 @@ def run_command(
 
 def run_command_to_file(
     command: list[str],
-    timeout: int,
+    timeout: int | None,
     stdout_path: Path,
     stdin_data: str | None = None,
 ) -> CommandResult:
-    """Execute *command* while streaming stdout directly to *stdout_path*."""
+    """Execute *command* while streaming stdout directly to *stdout_path*.
+
+    A *timeout* of ``None`` waits indefinitely until the command completes.
+    """
     try:
         with stdout_path.open("w", encoding="utf-8") as stdout_file:
             proc = subprocess.run(

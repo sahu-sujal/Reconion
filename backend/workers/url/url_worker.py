@@ -259,7 +259,9 @@ class UrlScanWorker(BaseWorker):
 
         def _wayback() -> tuple[str, int, set[str]]:
             out = urls_raw / "waybackurls.json"
-            raw = WaybackurlsRunner(timeout=1800).run_to_file(hostnames, out)
+            # No timeout — let waybackurls run until it completes (it can take
+            # well over 30 min on large scopes; a hard cap dropped all URLs).
+            raw = WaybackurlsRunner(timeout=None).run_to_file(hostnames, out)
             return SRC_WAYBACKURLS, raw, _read_lines(out)
 
         def _katana() -> tuple[str, int, set[str]]:
