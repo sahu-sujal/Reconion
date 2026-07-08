@@ -127,12 +127,14 @@ PIDS+=($!)
 echo "==> Starting FastAPI on http://$API_HOST:$API_PORT ..."
 "$VENV_PY" -m uvicorn backend.main:app \
   --host "$API_HOST" \
-  --port "$API_PORT" &
+  --port "$API_PORT" \
+  >> "$LOG_DIR/backend.log" 2>&1 &
 PIDS+=($!)
 
 echo
 echo "==> Backend stack is up:"
 echo "      API     : http://$API_HOST:$API_PORT  (docs at /docs)"
+echo "      Backend : $LOG_DIR/backend.log"
 echo "      Worker  : $LOG_DIR/celery_worker.log"
 echo "      Beat    : $LOG_DIR/celery_beat.log"
 echo "      Redis   : $REDIS_HOST:$REDIS_PORT"
