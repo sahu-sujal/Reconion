@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from tools.common.tool_paths import bundled_script
@@ -73,8 +74,13 @@ class LinkFinderRunner(EndpointToolBase):
             if not js_path.is_file() or js_path.stat().st_size == 0:
                 continue
             try:
+                # Use the *worker's own* interpreter (sys.executable), not a bare
+                # "python3": under systemd the venv isn't "activated", so bare
+                # "python3" is the system interpreter, which lacks LinkFinder's
+                # deps (jsbeautifier) and fails at import — silently yielding no
+                # endpoints. sys.executable is the venv python with all deps.
                 proc = subprocess.run(
-                    ["python3", self._script, "-i", str(js_path), "-o", "cli"],
+                    [sys.executable, self._script, "-i", str(js_path), "-o", "cli"],
                     capture_output=True,
                     text=True,
                     timeout=self.timeout,
@@ -84,6 +90,6 @@ class LinkFinderRunner(EndpointToolBase):
                 # A single slow file must not sink the whole batch.
                 continue
             except FileNotFoundError as exc:
-                raise RuntimeError(f"python3 not found while running LinkFinder: {exc}")
+                raise RuntimeError(f"interpreter not found while running LinkFinder: {exc}")
             endpoints.update(self.parse_output(proc.stdout))
         return sorted(endpoints)

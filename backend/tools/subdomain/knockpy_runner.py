@@ -31,7 +31,16 @@ class KnockpyRunner(ToolBase):
     def tool_name(self) -> str:
         return "knockpy"
 
-    def run(self, target: str) -> list[str]:  # type: ignore[override]
+    def run(  # type: ignore[override]
+        self, target: str, raw_report_dir: Path | str | None = None
+    ) -> list[str]:
+        """Enumerate subdomains for *target*.
+
+        If *raw_report_dir* is given, knockpy's full JSON report is written there
+        as ``knockpy.json`` (e.g. ``subdomains/raw/knockpy.json``). We persist the
+        stdout JSON — the authoritative data we already parse — so it is complete
+        and independent of knockpy's version-specific internal save behaviour.
+        """
         if not Path(_KNOCKPY_BIN).exists():
             raise RuntimeError(
                 f"knockpy not found at {_KNOCKPY_BIN} — is knock-subdomains installed?"
@@ -67,7 +76,27 @@ class KnockpyRunner(ToolBase):
             shutil.rmtree(work_dir, ignore_errors=True)
             _sweep_stray_reports(target)
 
+        if raw_report_dir is not None:
+            _save_json_report(raw_report_dir, proc.stdout)
+
         return _parse_knockpy_stdout(proc.stdout)
+
+
+def _save_json_report(raw_report_dir: Path | str, stdout: str) -> None:
+    """Write knockpy's stdout JSON to ``<raw_report_dir>/knockpy.json``.
+
+    Best-effort: a failure to persist the report must never fail the scan, since
+    the parsed subdomain list is already returned separately.
+    """
+    stdout = stdout.strip()
+    if not stdout:
+        return
+    try:
+        out_dir = Path(raw_report_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "knockpy.json").write_text(stdout, encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _sweep_stray_reports(target: str) -> None:

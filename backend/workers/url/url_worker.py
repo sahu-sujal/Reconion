@@ -285,18 +285,6 @@ class UrlScanWorker(BaseWorker):
             )
             return SRC_HAKRAWLER, raw, urls
 
-        def _subjs() -> tuple[str, int, set[str]]:
-            # subjs is JS-only: it fetches live hosts and returns JS file URLs.
-            # Raw output is streamed to the scope's js/ artifact tree.
-            out = js_raw / "subjs.json"
-            raw = SubjsRunner(timeout=1800, concurrency=20).run_to_file(live_urls, out)
-            js_urls = _read_lines(out)
-            self.logger.info(
-                "Tool=SUBJS hosts=%d js_found=%d status=SUCCESS",
-                len(live_urls), len(js_urls),
-            )
-            return SRC_SUBJS, raw, js_urls
-
         tasks = {}
         if hostnames:
             tasks[SRC_GAU] = _gau
@@ -305,7 +293,6 @@ class UrlScanWorker(BaseWorker):
         if live_urls:
             tasks[SRC_KATANA] = _katana
             tasks[SRC_HAKRAWLER] = _hakrawler
-            tasks[SRC_SUBJS] = _subjs
 
         exec_recs = {
             label: self._create_tool_execution(db, scan_run_id, label.lower(), f"{label.lower()} <hosts>")
@@ -330,6 +317,42 @@ class UrlScanWorker(BaseWorker):
                     self._finalize_tool_execution(
                         db, exec_recs[label], ToolExecutionStatus.FAILED, error_message=str(exc),
                     )
+
+        # ---- Phase 2: subjs over the FULL URL corpus --------------------- #
+        # subjs (github.com/lc/subjs) fetches each URL and harvests the JS files
+        # it references. Its power is scanning a large URL list ("cat urls.txt |
+        # subjs"), not just host roots: a deep page discovered by gau/wayback/
+        # katana/hakrawler can reference JS that a bare host fetch never sees.
+        # So we run it *after* the crawlers, on the union of live hosts + every
+        # URL they found, deduped — maximizing JS coverage.
+        corpus: set[str] = set(live_urls)
+        for _raw_count, urls in results.values():
+            corpus.update(urls)
+        if corpus:
+            subjs_rec = self._create_tool_execution(
+                db, scan_run_id, SRC_SUBJS.lower(), f"{SRC_SUBJS.lower()} <urls>"
+            )
+            try:
+                out = js_raw / "subjs.json"
+                raw_count = SubjsRunner(timeout=1800, concurrency=20).run_to_file(
+                    sorted(corpus), out
+                )
+                js_urls = _read_lines(out)
+                results[SRC_SUBJS] = (raw_count, js_urls)
+                self.logger.info(
+                    "Tool=SUBJS urls_scanned=%d js_found=%d status=SUCCESS",
+                    len(corpus), len(js_urls),
+                )
+                self._finalize_tool_execution(
+                    db, subjs_rec, ToolExecutionStatus.COMPLETED,
+                    raw_records_found=raw_count, records_found=len(js_urls),
+                )
+            except Exception as exc:  # subjs failing must not kill the scan
+                metrics.tool_errors[SRC_SUBJS] = str(exc)
+                self.logger.warning("Tool SUBJS failed during content discovery: %s", exc)
+                self._finalize_tool_execution(
+                    db, subjs_rec, ToolExecutionStatus.FAILED, error_message=str(exc),
+                )
 
         # Record per-tool counts + merge into source maps
         for label, (raw_count, urls) in results.items():

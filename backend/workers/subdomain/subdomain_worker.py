@@ -277,7 +277,12 @@ class SubdomainScanWorker(BaseWorker):
 
         def _work(tool_name: str, runner) -> tuple[list[str], list[str]]:
             # Runs in a worker thread — pure compute + this tool's own raw file.
-            raw: list[str] = runner.run(scope.target)
+            # knockpy additionally persists its native JSON report to
+            # subdomains/raw/knockpy.json (alongside the raw/knockpy.txt list).
+            if tool_name == "knockpy":
+                raw: list[str] = runner.run(scope.target, raw_report_dir=raw_dir)
+            else:
+                raw = runner.run(scope.target)
             self.storage_service.save_lines_artifact(raw_dir, f"{tool_name}.txt", raw)
             filtered = filter_in_scope(raw, scope.target)
             return raw, filtered
