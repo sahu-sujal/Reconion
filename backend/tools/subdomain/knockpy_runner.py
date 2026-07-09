@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import tools.common.command_runner  # ensure ~/go/bin is on PATH
@@ -32,6 +34,13 @@ class KnockpyRunner(ToolBase):
             raise RuntimeError(
                 f"knockpy not found at {_KNOCKPY_BIN} — is knock-subdomains installed?"
             )
+        # knockpy v9 has no flag to control where it saves its results file:
+        # it always writes "<domain>_<timestamp>.json" to the process CWD. Under
+        # systemd the worker's CWD is the repo's backend/ dir, so that artifact
+        # litters the source tree. We only need the stdout JSON, so run knockpy
+        # in a throwaway temp dir and delete it — the stray file lands there and
+        # is cleaned up regardless of knockpy's internal naming.
+        work_dir = tempfile.mkdtemp(prefix="knockpy_")
         try:
             proc = subprocess.run(
                 [_KNOCKPY_BIN, "-d", target, "--recon", "--json"],
@@ -39,9 +48,12 @@ class KnockpyRunner(ToolBase):
                 text=True,
                 timeout=self.timeout,
                 check=False,
+                cwd=work_dir,
             )
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"knockpy timed out after {self.timeout}s")
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
 
         return _parse_knockpy_stdout(proc.stdout)
 
