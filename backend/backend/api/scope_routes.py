@@ -10,6 +10,7 @@ from backend.schemas.host_schema import (
     DnsRecordResponse,
     HostResponse,
     HttpResponseResponse,
+    ScreenshotResponse,
     TechnologyResponse,
 )
 from backend.schemas.scope_schema import (
@@ -25,6 +26,7 @@ from repositories.dns_record_repository import DnsRecordRepository
 from repositories.host_repository import HostRepository
 from repositories.http_response_repository import HttpResponseRepository
 from repositories.js_file_repository import JsFileRepository
+from repositories.screenshot_repository import ScreenshotRepository
 from repositories.subdomain_repository import SubdomainRepository
 from repositories.technology_repository import TechnologyRepository
 from repositories.url_repository import URLRepository
@@ -42,6 +44,7 @@ _http_response_repo = HttpResponseRepository()
 _technology_repo = TechnologyRepository()
 _url_repo = URLRepository()
 _js_file_repo = JsFileRepository()
+_screenshot_repo = ScreenshotRepository()
 
 
 @router.post("", response_model=ScopeResponse, status_code=status.HTTP_201_CREATED)
@@ -286,3 +289,18 @@ def get_scope_js_files(
     )
     total = _js_file_repo.count_by_scope(db, scope_id, search=search, host=host)
     return PaginatedJsFiles(total=total, offset=offset, limit=limit, items=items)
+
+
+@router.get("/{scope_id}/screenshots", response_model=list[ScreenshotResponse])
+def get_scope_screenshots(
+    scope_id: uuid.UUID,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(5000, ge=1, le=10000),
+    db: Session = Depends(get_db),
+) -> list[ScreenshotResponse]:
+    """List page screenshots captured for a scope (one per host+url)."""
+    try:
+        service.get_scope(db=db, scope_id=scope_id)
+    except EntityNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return _screenshot_repo.list_by_scope(db, scope_id, offset=offset, limit=limit)

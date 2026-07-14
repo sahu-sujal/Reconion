@@ -47,6 +47,13 @@ const STAGES = [
     Icon: SearchIcon,
     step: 6,
   },
+  {
+    type: 'SCREENSHOT',
+    label: 'Screenshots',
+    desc: 'Capture a page screenshot of every live host (gowitness). Standalone — run after HTTP probing. Does not chain.',
+    Icon: GlobeIcon,
+    step: '★',
+  },
 ]
 
 export default function StartScanModal({ target, busy, activeScan, onStart, onClose }) {

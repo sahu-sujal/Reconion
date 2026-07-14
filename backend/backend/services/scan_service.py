@@ -55,6 +55,10 @@ class ScanService:
             "workers.js_secret_worker.run_js_secret_scan",
             "js_secret_worker",
         ),
+        ScanType.SCREENSHOT.value: (
+            "workers.http.screenshot_worker.run_screenshot_scan",
+            "screenshot_worker",
+        ),
     }
 
     def start_scan(

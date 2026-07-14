@@ -41,4 +41,13 @@ export const api = {
   del: (path) => request(path, { method: 'DELETE' }),
 }
 
+// Build an absolute URL for a stored artifact (screenshot, etc.) served by the
+// backend's /storage static mount. `relPath` is stored relative to the storage
+// root, e.g. "programs/<id>/scopes/<id>/screenshots/foo.jpeg".
+export function storageUrl(relPath) {
+  if (!relPath) return null
+  const clean = String(relPath).replace(/^\/+/, '')
+  return `${API_BASE_URL}/storage/${clean}`
+}
+
 export { API_BASE_URL }

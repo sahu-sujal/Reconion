@@ -57,6 +57,10 @@ def _constraint_exists(name: str) -> bool:
 
 
 def upgrade() -> None:
+    # Purge any leftover PARAMETER_DISCOVERY scan_run rows — the feature is gone,
+    # so these are orphans, and they'd otherwise violate the narrowed constraint.
+    op.execute("DELETE FROM scan_runs WHERE scan_type = 'PARAMETER_DISCOVERY'")
+
     # Narrow the scan_type check constraint (remove PARAMETER_DISCOVERY).
     if _constraint_exists("ck_scan_runs_scan_type"):
         op.drop_constraint("ck_scan_runs_scan_type", "scan_runs", type_="check")

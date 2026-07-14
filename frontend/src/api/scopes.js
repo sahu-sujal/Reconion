@@ -76,6 +76,14 @@ export const scopesApi = {
   },
   // Unique hosts that have discovered URLs — for the host filter dropdown.
   urlHosts: (id) => api.get(`/scopes/${id}/url-hosts`),
+  // Page screenshots captured by gowitness (one per host+url).
+  screenshots: (id, { offset = 0, limit = 5000 } = {}) => {
+    const params = new URLSearchParams({
+      offset: String(offset),
+      limit: String(limit),
+    })
+    return api.get(`/scopes/${id}/screenshots?${params.toString()}`)
+  },
 }
 
 export const SCOPE_TYPES = [

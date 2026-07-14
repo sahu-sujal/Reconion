@@ -11,6 +11,7 @@ import database.models  # noqa: F401
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 
 from backend.api.asset_routes import router as asset_router
@@ -97,6 +98,12 @@ app.include_router(scan_router)
 app.include_router(endpoint_router)
 app.include_router(asset_router)
 app.include_router(secret_router)
+
+# Serve stored recon artifacts (screenshots, etc.) as static files so the
+# frontend can render them directly. Only the programs tree is exposed.
+_STORAGE_DIR = ROOT_DIR / "storage"
+_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/storage", StaticFiles(directory=str(_STORAGE_DIR)), name="storage")
 
 
 @app.middleware("http")

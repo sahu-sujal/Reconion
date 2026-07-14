@@ -23,8 +23,32 @@ class HostResponse(BaseModel):
     waf: bool = False
     url_count: int = 0
     js_count: int = 0
+    endpoint_count: int = 0
+    secret_count: int = 0
+    screenshot_count: int = 0
+    screenshot_path: str | None = None
     first_seen: datetime | None = None
     last_seen: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ScreenshotResponse(BaseModel):
+    id: UUID
+    program_id: UUID
+    scope_id: UUID
+    host_id: UUID
+    url: str
+    final_url: str | None = None
+    title: str | None = None
+    status_code: int | None = None
+    file_name: str | None = None
+    file_path: str | None = None
+    failed: bool = False
+    failed_reason: str | None = None
+    captured_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -17,6 +17,7 @@ celery_app = Celery(
         "workers.subdomain.subdomain_worker",
         "workers.dns.dns_worker",
         "workers.http.http_worker",
+        "workers.http.screenshot_worker",
         "workers.url.url_worker",
         "workers.js_endpoint_worker",
         "workers.js_secret_worker",

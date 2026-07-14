@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from database.models.http_response import HttpResponse
     from database.models.program import Program
     from database.models.scope import Scope
+    from database.models.screenshot import Screenshot
     from database.models.technology import Technology
 
 
@@ -73,6 +74,12 @@ class Host(Base, UUIDMixin, TimestampMixin):
     secret_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # Screenshots — maintained counter + latest capture path (relative to
+    # storage root, e.g. "programs/<pid>/scopes/<sid>/screenshots/<file>").
+    screenshot_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    screenshot_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     first_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -87,4 +94,7 @@ class Host(Base, UUIDMixin, TimestampMixin):
     )
     http_responses: Mapped[list["HttpResponse"]] = relationship(
         "HttpResponse", back_populates="host", cascade="all, delete-orphan", passive_deletes=True,
+    )
+    screenshots: Mapped[list["Screenshot"]] = relationship(
+        "Screenshot", back_populates="host", cascade="all, delete-orphan", passive_deletes=True,
     )

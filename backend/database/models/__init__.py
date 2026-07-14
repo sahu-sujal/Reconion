@@ -14,6 +14,7 @@ from database.models.program_settings import ProgramSettings
 from database.models.notification import Notification
 from database.models.scan_run import ScanRun
 from database.models.scope import Scope
+from database.models.screenshot import Screenshot
 from database.models.subdomain import Subdomain
 from database.models.subdomain_source import SubdomainSource
 from database.models.tool_execution import ToolExecution
@@ -38,6 +39,7 @@ __all__ = [
     "Notification",
     "ScanRun",
     "Scope",
+    "Screenshot",
     "Subdomain",
     "SubdomainSource",
     "ToolExecution",

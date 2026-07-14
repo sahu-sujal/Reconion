@@ -352,6 +352,63 @@ def send_http_scan_notification(
     return False
 
 
+def send_screenshot_scan_notification(
+    webhook_url: str | None,
+    program_name: str,
+    scope_target: str,
+    metrics,              # ScreenshotMetrics dataclass — avoid circular import
+) -> bool:
+    """Send a structured Discord embed for a completed screenshot scan.
+
+    Never raises.
+    """
+    resolved_url = webhook_url or _get_webhook_url()
+    if not resolved_url:
+        logger.warning("Discord webhook URL not configured — screenshot notification skipped")
+        return False
+
+    has_shots = metrics.captured > 0
+    color = 0x00FF7F if has_shots else 0x5865F2
+    title = (
+        f"\U0001f4f8 {metrics.captured} Screenshot(s) Captured!"
+        if has_shots
+        else "\U0001f4f8 Screenshot Scan Complete — No Captures"
+    )
+
+    block = "\n".join([
+        "```",
+        f"Hosts probed     {metrics.hosts_input:>7}",
+        f"Captured         {metrics.captured:>7}",
+        f"Failed           {metrics.failed:>7}",
+        "```",
+    ])
+
+    embed = {
+        "title": title,
+        "description": "\n".join([
+            f"**Program:** {program_name}",
+            f"**Scope:** `{scope_target}`",
+            "",
+            "**Metrics:**",
+            block,
+        ]),
+        "color": color,
+    }
+    payload = {"embeds": [embed]}
+
+    try:
+        _send_webhook(resolved_url, json.dumps(payload).encode("utf-8"))
+        logger.info("Discord screenshot notification sent: %s/%s", program_name, scope_target)
+        return True
+    except HTTPError as exc:
+        logger.warning("Discord webhook HTTP error %s %s", exc.code, exc.reason)
+    except URLError as exc:
+        logger.warning("Discord webhook URL error: %s", exc.reason)
+    except Exception as exc:
+        logger.warning("Discord screenshot notification failed: %s", exc)
+    return False
+
+
 # ------------------------------------------------------------------ #
 # Content discovery scan-complete notification (Phase 5)                #
 # ------------------------------------------------------------------ #

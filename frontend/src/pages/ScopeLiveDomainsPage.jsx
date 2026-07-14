@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { scopesApi } from '../api/scopes'
 import { SearchIcon, ChevronRightIcon } from '../components/icons'
-import SubdomainDrawer from '../components/SubdomainDrawer'
+import DomainDetailDrawer from '../components/DomainDetailDrawer'
 
 const PAGE_SIZE = 50
 
@@ -35,6 +35,7 @@ export default function ScopeLiveDomainsPage() {
   const [httpResponses, setHttpResponses] = useState([])
   const [dnsRecords, setDnsRecords] = useState([])
   const [technologies, setTechnologies] = useState([])
+  const [screenshots, setScreenshots] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -44,25 +45,27 @@ export default function ScopeLiveDomainsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(0)
 
-  const [selected, setSelected] = useState(null) // host object for drawer
+  const [selectedIdx, setSelectedIdx] = useState(null) // index into `filtered`
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       // live_only → resolved hosts that returned an HTTP status code.
-      const [scopeData, liveHosts, http, dns, tech] = await Promise.all([
+      const [scopeData, liveHosts, http, dns, tech, shots] = await Promise.all([
         scopesApi.get(scopeId),
         scopesApi.hosts(scopeId, { limit: 10000, liveOnly: true }).catch(() => []),
         scopesApi.httpResponses(scopeId, { limit: 10000 }).catch(() => []),
         scopesApi.dnsRecords(scopeId, { limit: 10000 }).catch(() => []),
         scopesApi.technologies(scopeId, { limit: 10000 }).catch(() => []),
+        scopesApi.screenshots(scopeId, { limit: 10000 }).catch(() => []),
       ])
       setScope(scopeData)
       setHosts(Array.isArray(liveHosts) ? liveHosts : [])
       setHttpResponses(Array.isArray(http) ? http : [])
       setDnsRecords(Array.isArray(dns) ? dns : [])
       setTechnologies(Array.isArray(tech) ? tech : [])
+      setScreenshots(Array.isArray(shots) ? shots : [])
     } catch (err) {
       setError(err.message)
     } finally {
@@ -91,28 +94,13 @@ export default function ScopeLiveDomainsPage() {
       if (!dnsByHostId.has(d.host_id)) dnsByHostId.set(d.host_id, [])
       dnsByHostId.get(d.host_id).push(d)
     })
-    return { techByHostId, httpByHostId, dnsByHostId }
-  }, [technologies, httpResponses, dnsRecords])
-
-  // Reuse SubdomainDrawer by synthesizing a subdomain-shaped object from the host.
-  const resolveBundle = useCallback(
-    (host) => ({
-      subdomain: {
-        id: host.id,
-        subdomain: host.host,
-        scope_id: host.scope_id,
-        source: '—',
-        endpoint_count: 0,
-        first_seen: host.first_seen,
-        last_seen: host.last_seen,
-      },
-      host,
-      technologies: indices.techByHostId.get(host.id) || [],
-      httpResponses: indices.httpByHostId.get(host.id) || [],
-      dnsRecords: indices.dnsByHostId.get(host.id) || [],
-    }),
-    [indices],
-  )
+    const shotsByHostId = new Map()
+    screenshots.forEach((s) => {
+      if (!shotsByHostId.has(s.host_id)) shotsByHostId.set(s.host_id, [])
+      shotsByHostId.get(s.host_id).push(s)
+    })
+    return { techByHostId, httpByHostId, dnsByHostId, shotsByHostId }
+  }, [technologies, httpResponses, dnsRecords, screenshots])
 
   // ---- Dropdown option lists (from real data) ----
   const techOptions = useMemo(
@@ -143,7 +131,13 @@ export default function ScopeLiveDomainsPage() {
 
   useEffect(() => {
     setPage(0)
+    setSelectedIdx(null)
   }, [query, techFilter, statusFilter])
+
+  // Keep the paginated table in sync when navigating domains in the drawer.
+  useEffect(() => {
+    if (selectedIdx != null) setPage(Math.floor(selectedIdx / PAGE_SIZE))
+  }, [selectedIdx])
 
   const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
@@ -278,11 +272,16 @@ export default function ScopeLiveDomainsPage() {
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((h) => {
+            {pageRows.map((h, i) => {
               const techs = indices.techByHostId.get(h.id) || []
               const url = hostUrl(h)
+              const filteredIdx = page * PAGE_SIZE + i
               return (
-                <tr key={h.id} className="row-clickable" onClick={() => setSelected(h)}>
+                <tr
+                  key={h.id}
+                  className="row-clickable"
+                  onClick={() => setSelectedIdx(filteredIdx)}
+                >
                   <td className="cell-mono">{h.host}</td>
                   <td>
                     <StatusPill code={h.status_code} />
@@ -350,8 +349,27 @@ export default function ScopeLiveDomainsPage() {
         </div>
       )}
 
-      {selected && (
-        <SubdomainDrawer data={resolveBundle(selected)} onClose={() => setSelected(null)} />
+      {selectedIdx != null && filtered[selectedIdx] && (
+        (() => {
+          const h = filtered[selectedIdx]
+          return (
+            <DomainDetailDrawer
+              host={h}
+              technologies={indices.techByHostId.get(h.id) || []}
+              httpResponses={indices.httpByHostId.get(h.id) || []}
+              dnsRecords={indices.dnsByHostId.get(h.id) || []}
+              screenshots={indices.shotsByHostId.get(h.id) || []}
+              position={{ index: selectedIdx, total: filtered.length }}
+              onPrev={selectedIdx > 0 ? () => setSelectedIdx((i) => i - 1) : null}
+              onNext={
+                selectedIdx < filtered.length - 1
+                  ? () => setSelectedIdx((i) => i + 1)
+                  : null
+              }
+              onClose={() => setSelectedIdx(null)}
+            />
+          )
+        })()
       )}
     </div>
   )
