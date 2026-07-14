@@ -10,7 +10,6 @@ gowitness docs: https://github.com/sensepost/gowitness
 from __future__ import annotations
 
 import json
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -115,12 +114,12 @@ class GowitnessRunner(ToolBase):
 
         screenshot_dir.mkdir(parents=True, exist_ok=True)
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".txt", prefix="gowitness_in_", delete=False, encoding="utf-8"
-        ) as tmp_in:
-            tmp_in.write("\n".join(urls))
-            input_path = Path(tmp_in.name)
-
+        # Keep the input list alongside the scan artifacts rather than in
+        # /tmp. Some worker/container setups run gowitness with a different
+        # mount namespace or user and cannot read the transient /tmp file.
+        # The scope lock means one screenshot scan owns this path at a time.
+        input_path = screenshot_dir / "gowitness-input.txt"
+        input_path.write_text("\n".join(urls) + "\n", encoding="utf-8")
         jsonl_path = screenshot_dir / "gowitness.jsonl"
         # gowitness appends JSONL output. A scan must only ingest records from
         # its own invocation; otherwise a rerun can persist stale captures from
@@ -143,7 +142,14 @@ class GowitnessRunner(ToolBase):
             if result.timed_out:
                 raise RuntimeError(f"gowitness timed out after {self.timeout}s")
             if result.returncode != 0:
-                detail = (result.stderr or result.stdout).strip()
+                # gowitness prints the underlying cobra error on stdout and
+                # its usage text on stderr; retain both so failures are
+                # actionable instead of reporting only the help screen.
+                detail = "\n".join(
+                    output.strip()
+                    for output in (result.stdout, result.stderr)
+                    if output.strip()
+                )
                 raise RuntimeError(
                     f"gowitness exited with status {result.returncode}"
                     + (f": {detail}" if detail else "")
