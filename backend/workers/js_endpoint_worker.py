@@ -112,6 +112,7 @@ class JsEndpointWorker(BaseWorker):
 
         # Per-tool aggregate raw counts for tool_executions (across all batches).
         tool_raw_counts = {LINKFINDER: 0, XNLINKFINDER: 0, JSLUICE: 0}
+        self._batch_index = 0  # per-batch raw-file suffix (endpoints/raw/<tool>.batch-N.txt)
 
         try:
             scan_run_uuid = uuid.UUID(scan_run_id)
@@ -309,6 +310,7 @@ class JsEndpointWorker(BaseWorker):
         Downloaded JS + all scratch files are deleted before this returns, even
         on error (the download manager's context manager guarantees cleanup).
         """
+        self._batch_index += 1
         # (js_url, js_file_id) pairs for the download manager.
         js_items = [(url, jid) for url, jid, _ in batch]
         # js_url -> (js_file_id, host_id) for attribution after resolution.
@@ -374,9 +376,10 @@ class JsEndpointWorker(BaseWorker):
             tool = extractors[name]
             t0 = time.monotonic()
             if name in (LINKFINDER, JSLUICE):
-                hits = self._run_per_file_tool(name, tool, js_paths)
+                hits, raw = self._run_per_file_tool(name, tool, js_paths)
             else:
-                hits = self._run_batch_tool(name, tool, js_paths)
+                hits, raw = self._run_batch_tool(name, tool, js_paths)
+            self._save_extractor_raw(ep_raw, name, raw)
             elapsed_ms = int((time.monotonic() - t0) * 1000)
             self.logger.info(
                 "Tool=%s files=%d raw_endpoints=%d status=%s time=%dms",
@@ -401,31 +404,59 @@ class JsEndpointWorker(BaseWorker):
         metrics.jsluice_count += len(results.get(JSLUICE, []))
         return results
 
+    def _save_extractor_raw(self, ep_raw: Path, name: str, raw: str) -> None:
+        """Persist an extractor's raw output for this batch to ``endpoints/raw/``.
+
+        One file per tool per batch: ``<tool>.batch-N.txt``. Best-effort — a
+        persistence failure must never affect the scan. An empty output still
+        writes an empty file, so a silent zero-result run is visible on disk.
+        """
+        if ep_raw is None:
+            return
+        fname = f"{name.lower()}.batch-{self._batch_index}.txt"
+        try:
+            (Path(ep_raw) / fname).write_text(raw or "", encoding="utf-8")
+        except OSError as exc:
+            self.logger.warning("Failed to persist raw output %s: %s", fname, exc)
+
     def _run_per_file_tool(
         self, name: str, tool, js_paths: list[Path]
-    ) -> list[tuple[str, Path | None]]:
+    ) -> tuple[list[tuple[str, Path | None]], str]:
         """Run a per-file extractor, retrying individual files on batch failure.
 
-        Returns ``(raw_hit, source_js_path)`` pairs so each hit resolves against
-        its own JS file. JSluice returns structured objects — we take ``.url``.
+        Returns ``([(raw_hit, source_js_path), ...], raw_output)``. The raw output
+        is the concatenation of the tool's stdout across every file so the worker
+        can persist it. JSluice returns structured objects — we take ``.url``.
         """
         hits: list[tuple[str, Path | None]] = []
+        raw_chunks: list[str] = []
+
+        def _capture(p: Path | None) -> None:
+            # LinkFinder overwrites last_raw_output per file, so grab it each call.
+            chunk = getattr(tool, "last_raw_output", "") or ""
+            if chunk:
+                label = p.name if p is not None else "batch"
+                raw_chunks.append(f"# {label}\n{chunk.rstrip()}")
+
         try:
             if name == JSLUICE:
                 for ep in tool.run(js_paths):
                     # JSluice reports the file each hit came from.
                     src = Path(ep.filename) if ep.filename else None
                     hits.append((ep.url, src))
+                _capture(None)  # JSluice runs the whole batch at once.
             else:  # LinkFinder — run per file for precise provenance
                 for p in js_paths:
                     for raw in tool.run([p]):
                         hits.append((raw, p))
-            return hits
+                    _capture(p)
+            return hits, "\n".join(raw_chunks)
         except Exception as exc:
             self.logger.warning("%s batch failed (%s) — retrying per file", name, exc)
 
         # Per-file retry path — isolate the offending file(s).
         hits = []
+        raw_chunks = []
         for p in js_paths:
             try:
                 if name == JSLUICE:
@@ -434,19 +465,21 @@ class JsEndpointWorker(BaseWorker):
                 else:
                     for raw in tool.run([p]):
                         hits.append((raw, p))
+                _capture(p)
             except Exception as exc:
                 self.logger.warning("%s failed on %s: %s", name, p.name, exc)
-        return hits
+        return hits, "\n".join(raw_chunks)
 
     def _run_batch_tool(
         self, name: str, tool, js_paths: list[Path]
-    ) -> list[tuple[str, Path | None]]:
+    ) -> tuple[list[tuple[str, Path | None]], str]:
         """Run a directory/batch extractor (XNLinkFinder). No per-file provenance."""
         try:
-            return [(raw, None) for raw in tool.run(js_paths)]
+            hits = [(raw, None) for raw in tool.run(js_paths)]
+            return hits, getattr(tool, "last_raw_output", "") or ""
         except Exception as exc:
             self.logger.warning("%s failed on batch: %s", name, exc)
-            return []
+            return [], getattr(tool, "last_raw_output", "") or ""
 
     def _merge_and_resolve(
         self,

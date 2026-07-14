@@ -84,6 +84,7 @@ class MantraRunner(SecretToolBase):
             timeout=self.timeout,
             stdin_data="\n".join(urls) + "\n",
         )
+        self.last_raw_output = result.stdout or ""
         if result.timed_out:
             raise RuntimeError(f"mantra timed out after {self.timeout}s")
         return self.parse_output(result.stdout)

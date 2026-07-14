@@ -77,6 +77,9 @@ class SecretFinderRunner(SecretToolBase):
         self.validate()
         assert self._script is not None
         out: list[RawSecret] = []
+        # SecretFinder runs once per file; accumulate every file's raw stdout
+        # (tagged with its JS URL) so the worker can persist the full batch.
+        raw_chunks: list[str] = []
         for path, js_url in js_files:
             if not path.is_file() or path.stat().st_size == 0:
                 continue
@@ -90,5 +93,8 @@ class SecretFinderRunner(SecretToolBase):
                 continue  # one slow file must not sink the batch
             except FileNotFoundError as exc:
                 raise RuntimeError(f"python3 not found while running SecretFinder: {exc}")
+            if proc.stdout:
+                raw_chunks.append(f"# {js_url}\n{proc.stdout.rstrip()}")
             out.extend(self.parse_output(proc.stdout, js_url=js_url))
+        self.last_raw_output = "\n".join(raw_chunks)
         return out

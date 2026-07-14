@@ -12,8 +12,6 @@ from database.models.js_secret_source import JsSecretSource
 from database.models.program import Program
 from database.models.program_settings import ProgramSettings
 from database.models.notification import Notification
-from database.models.parameter import Parameter
-from database.models.parameter_source import ParameterSource
 from database.models.scan_run import ScanRun
 from database.models.scope import Scope
 from database.models.subdomain import Subdomain
@@ -38,8 +36,6 @@ __all__ = [
     "Program",
     "ProgramSettings",
     "Notification",
-    "Parameter",
-    "ParameterSource",
     "ScanRun",
     "Scope",
     "Subdomain",

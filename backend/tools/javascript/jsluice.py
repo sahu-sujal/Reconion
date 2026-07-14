@@ -150,6 +150,7 @@ class JsluiceRunner(EndpointToolBase):
         except FileNotFoundError as exc:
             raise RuntimeError(f"jsluice binary not runnable: {exc}")
 
+        self.last_raw_output = proc.stdout or ""
         return self.parse_output(proc.stdout)
 
     def run_single(self, js_path: Path) -> list[JsluiceEndpoint]:

@@ -35,6 +35,12 @@ class SecretToolBase(ABC):
 
     def __init__(self, timeout: int = 300) -> None:
         self.timeout = timeout
+        # The scanner's raw stdout from the most recent ``run()`` — retained so
+        # the worker can persist it to ``secrets/raw/`` for diagnosis (a tool
+        # returning zero parsed secrets vs. producing no output at all are very
+        # different faults, and only the raw output distinguishes them). Empty
+        # until the first run; set by each wrapper's ``run()``.
+        self.last_raw_output: str = ""
 
     @property
     @abstractmethod

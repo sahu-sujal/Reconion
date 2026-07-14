@@ -140,6 +140,7 @@ class NucleiExposuresRunner(SecretToolBase):
             "-disable-update-check",
         ]
         result = run_command(cmd, timeout=self.timeout, stdin_data="\n".join(urls) + "\n")
+        self.last_raw_output = result.stdout or ""
         if result.timed_out:
             raise RuntimeError(f"nuclei timed out after {self.timeout}s")
         return self.parse_output(result.stdout)

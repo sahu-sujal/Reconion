@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { GlobeIcon, RadarIcon, PulseIcon, SearchIcon } from './icons'
 
 // The pipeline runs sequentially: SUBDOMAIN → DNS → HTTP → CONTENT_DISCOVERY →
-// JS_ENDPOINT → JS_SECRET → PARAMETER_DISCOVERY. Each stage chains the next on
-// the backend, so picking an earlier stage runs everything after it too.
+// JS_ENDPOINT → JS_SECRET. Each stage chains the next on the backend, so picking
+// an earlier stage runs everything after it too.
 const STAGES = [
   {
     type: 'SUBDOMAIN',
@@ -43,16 +43,9 @@ const STAGES = [
   {
     type: 'JS_SECRET',
     label: 'JS secret discovery',
-    desc: 'Scan discovered JS files for secrets/keys (SecretFinder, Mantra, Nuclei exposures). Chains parameter discovery after.',
+    desc: 'Scan discovered JS files for secrets/keys (SecretFinder, Mantra, Nuclei exposures). Final stage.',
     Icon: SearchIcon,
     step: 6,
-  },
-  {
-    type: 'PARAMETER_DISCOVERY',
-    label: 'Parameter discovery',
-    desc: 'Discover hidden HTTP parameters on dynamic assets only (Arjun, ParamSpider). Reuses the classified inventory — no re-crawl. Final stage.',
-    Icon: SearchIcon,
-    step: 7,
   },
 ]
 

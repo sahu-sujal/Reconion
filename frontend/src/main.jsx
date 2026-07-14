@@ -8,6 +8,7 @@ import ProgramsPage from './pages/ProgramsPage.jsx'
 import ProgramDetailPage from './pages/ProgramDetailPage.jsx'
 import ScopeDetailPage from './pages/ScopeDetailPage.jsx'
 import ScopeSubdomainsPage from './pages/ScopeSubdomainsPage.jsx'
+import ScopeLiveDomainsPage from './pages/ScopeLiveDomainsPage.jsx'
 import ScopeContentPage from './pages/ScopeContentPage.jsx'
 import ScopeEndpointsPage from './pages/ScopeEndpointsPage.jsx'
 import ScopeSecretsPage from './pages/ScopeSecretsPage.jsx'
@@ -22,6 +23,7 @@ const router = createBrowserRouter([
       { path: 'programs/:programId', element: <ProgramDetailPage /> },
       { path: 'scopes/:scopeId', element: <ScopeDetailPage /> },
       { path: 'scopes/:scopeId/subdomains', element: <ScopeSubdomainsPage /> },
+      { path: 'scopes/:scopeId/live', element: <ScopeLiveDomainsPage /> },
       { path: 'scopes/:scopeId/content', element: <ScopeContentPage /> },
       { path: 'scopes/:scopeId/endpoints', element: <ScopeEndpointsPage /> },
       { path: 'scopes/:scopeId/secrets', element: <ScopeSecretsPage /> },

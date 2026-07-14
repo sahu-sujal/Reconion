@@ -179,11 +179,13 @@ class XnLinkFinderRunner(EndpointToolBase):
 
         params_file.unlink(missing_ok=True)  # discard — not used in this phase
         if not out_file.exists():
+            self.last_raw_output = ""
             return []
         try:
             raw = out_file.read_text(encoding="utf-8", errors="replace")
         finally:
             out_file.unlink(missing_ok=True)
+        self.last_raw_output = raw
         return self.parse_output(raw)
 
     @staticmethod

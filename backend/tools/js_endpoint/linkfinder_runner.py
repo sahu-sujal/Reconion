@@ -70,6 +70,7 @@ class LinkFinderRunner(EndpointToolBase):
         assert self._script is not None
 
         endpoints: set[str] = set()
+        raw_chunks: list[str] = []
         for js_path in js_paths:
             if not js_path.is_file() or js_path.stat().st_size == 0:
                 continue
@@ -91,5 +92,8 @@ class LinkFinderRunner(EndpointToolBase):
                 continue
             except FileNotFoundError as exc:
                 raise RuntimeError(f"interpreter not found while running LinkFinder: {exc}")
+            if proc.stdout:
+                raw_chunks.append(f"# {js_path.name}\n{proc.stdout.rstrip()}")
             endpoints.update(self.parse_output(proc.stdout))
+        self.last_raw_output = "\n".join(raw_chunks)
         return sorted(endpoints)

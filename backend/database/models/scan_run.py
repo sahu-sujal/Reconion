@@ -25,7 +25,7 @@ class ScanRun(Base, UUIDMixin, TimestampMixin):
         CheckConstraint(
             "scan_type IN ('SUBDOMAIN', 'DNS', 'HTTP', 'PORT', 'URL', 'JS', "
             "'CONTENT_DISCOVERY', 'JS_ENDPOINT', 'JS_SECRET', "
-            "'PARAMETER_DISCOVERY', 'TECHNOLOGY', 'SCREENSHOT')",
+            "'TECHNOLOGY', 'SCREENSHOT')",
             name="ck_scan_runs_scan_type",
         ),
     )
@@ -104,13 +104,6 @@ class ScanRun(Base, UUIDMixin, TimestampMixin):
     nuclei_exposures_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     total_secrets_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     new_secrets_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-
-    # Phase 6.4 — active parameter discovery metrics
-    arjun_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    paramspider_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    assets_scanned_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    total_parameters_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    new_parameters_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Checkpoint for pause/resume — worker-defined JSON describing where a paused

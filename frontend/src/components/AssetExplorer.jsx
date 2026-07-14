@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { assetsApi } from '../api/assets'
-import ParameterExplorer from './ParameterExplorer'
 
 const PAGE_SIZE = 25
 
@@ -61,27 +60,17 @@ function SourceBadges({ source }) {
  * (JS → size/endpoints/secrets; API → params/methods/source; etc.) without a
  * separate component per category.
  */
-// A clickable parameter-count cell that opens the Parameter Explorer drill-down
-// for the asset. Shows a plain count when zero (nothing to open).
-function ParamCount({ asset, onOpenParams }) {
+// The query-string parameter count for an asset (from URL parsing).
+function ParamCount({ asset }) {
   const n = asset.parameter_count || 0
   if (n === 0) return <span className="muted">0</span>
-  return (
-    <button
-      type="button"
-      className="badge badge-type param-count-chip"
-      onClick={() => onOpenParams(asset)}
-      title="View discovered parameters"
-    >
-      {n.toLocaleString()}
-    </button>
-  )
+  return <span>{n.toLocaleString()}</span>
 }
 
-function columnsFor(category, onOpenParams) {
+function columnsFor(category) {
   const link = (a) => <AssetLink url={a.normalized_url} />
   const src = (a) => <SourceBadges source={a.discovery_source} />
-  const params = (a) => <ParamCount asset={a} onOpenParams={onOpenParams} />
+  const params = (a) => <ParamCount asset={a} />
   switch (category) {
     case 'JAVASCRIPT':
       return {
@@ -151,9 +140,6 @@ export default function AssetExplorer({ scopeId }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const debounceRef = useRef(null)
-
-  // Parameter Explorer drill-down: the asset whose parameters are being viewed.
-  const [paramAsset, setParamAsset] = useState(null)
 
   // ---- Load taxonomy + per-category counts (stats) + facets ----
   const loadStats = useCallback(() => {
@@ -230,7 +216,7 @@ export default function AssetExplorer({ scopeId }) {
   }, [meta, counts])
 
   const activeMeta = meta.find((m) => m.category === category)
-  const { head, cells } = columnsFor(category, setParamAsset)
+  const { head, cells } = columnsFor(category)
 
   const total = data.total || 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -399,15 +385,6 @@ export default function AssetExplorer({ scopeId }) {
           </div>
         )}
       </section>
-
-      {/* ---- Parameter Explorer drill-down (Phase 6.4) ---- */}
-      {paramAsset && (
-        <ParameterExplorer
-          assetId={paramAsset.id}
-          assetUrl={paramAsset.normalized_url}
-          onClose={() => setParamAsset(null)}
-        />
-      )}
     </div>
   )
 }

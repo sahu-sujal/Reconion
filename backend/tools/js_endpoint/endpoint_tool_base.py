@@ -30,6 +30,11 @@ class EndpointToolBase(ABC):
 
     def __init__(self, timeout: int = 120) -> None:
         self.timeout = timeout
+        # Raw tool output from the most recent ``run()`` — retained so the worker
+        # can persist it to ``endpoints/raw/`` for diagnosis (distinguishing a
+        # tool that found nothing from one that produced no output / errored).
+        # Empty until the first run; set by each wrapper's ``run()``.
+        self.last_raw_output: str = ""
 
     @property
     @abstractmethod

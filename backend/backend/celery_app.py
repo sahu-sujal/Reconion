@@ -20,7 +20,6 @@ celery_app = Celery(
         "workers.url.url_worker",
         "workers.js_endpoint_worker",
         "workers.js_secret_worker",
-        "workers.parameter_discovery_worker",
         "workers.notification.discord_worker",
         "workers.scheduler.scan_scheduler",
     ],

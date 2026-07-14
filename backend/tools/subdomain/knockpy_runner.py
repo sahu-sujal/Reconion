@@ -51,15 +51,21 @@ class KnockpyRunner(ToolBase):
         # repo's backend/ dir, so those artifacts litter the source tree. We only
         # need the stdout JSON, so we contain knockpy's writes in a throwaway
         # temp dir and delete it. Belt-and-braces:
-        #   1. cwd=work_dir     — catches versions that write to the process CWD.
-        #   2. KNOCKPY_DB / HOME — point the DB and ~/.knockpy config into the
-        #      temp dir so the save path can never reach backend/.
+        #   1. cwd=work_dir  — catches versions that write to the process CWD.
+        #   2. KNOCKPY_DB    — points the reports.db into the temp dir so the DB
+        #      save path can never reach backend/.
         #   3. a post-run sweep — removes any stray report that still leaked into
         #      the real CWD, regardless of knockpy's internal naming.
+        #
+        # NOTE: we deliberately do NOT override HOME. knockpy reads its recon
+        # config (and API keys) from ~/.knockpy/recon_services.json; pointing HOME
+        # at an empty temp dir makes --recon find no services and return zero
+        # subdomains — the exact "empty scan, but manual run works" bug. KNOCKPY_DB
+        # already contains the only artifact (the DB) that HOME was meant to
+        # redirect, so overriding HOME is both unnecessary and harmful.
         work_dir = tempfile.mkdtemp(prefix="knockpy_")
         env = dict(os.environ)
         env["KNOCKPY_DB"] = str(Path(work_dir) / "reports.db")
-        env["HOME"] = work_dir
         try:
             proc = subprocess.run(
                 [_KNOCKPY_BIN, "-d", target, "--recon", "--json"],

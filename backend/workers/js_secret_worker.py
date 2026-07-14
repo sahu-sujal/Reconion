@@ -106,6 +106,7 @@ class JsSecretWorker(BaseWorker):
         metrics = SecretMetrics()
         started = datetime.now(timezone.utc)
         tool_raw_counts = {SECRETFINDER: 0, MANTRA: 0, NUCLEI: 0}
+        self._batch_index = 0  # per-batch raw-file suffix (secrets/raw/<tool>.batch-N.*)
 
         try:
             scan_run_uuid = uuid.UUID(scan_run_id)
@@ -174,17 +175,6 @@ class JsSecretWorker(BaseWorker):
                 metrics=metrics, duration_seconds=duration,
             )
 
-            # ---- Chain: active parameter discovery (Phase 6.4) --------- #
-            # Runs on the classified dynamic assets; independent of secret data.
-            # Failure here must not abort this scan.
-            try:
-                self._chain_parameter_discovery(db, program.id, scope.id)
-            except Exception as chain_exc:
-                self.logger.warning(
-                    "Failed to chain parameter discovery after secret scan %s: %s",
-                    scan_run_id, chain_exc,
-                )
-
         except Exception as exc:
             self.logger.exception("JS secret scan %s failed: %s", scan_run_id, exc)
             self.mark_failed(scan_run_id, str(exc))
@@ -202,6 +192,7 @@ class JsSecretWorker(BaseWorker):
 
     def _process_batch(self, db, program, scope, host_map, tools, available,
                        batch, now, metrics, tool_raw_counts, sec_raw) -> None:
+        self._batch_index += 1
         js_items = [(url, jid) for jid, url, _ in batch]
 
         with JsDownloadManager() as dl:
@@ -224,7 +215,7 @@ class JsSecretWorker(BaseWorker):
             metrics.js_processed += len(downloaded)
 
             per_tool = self._run_scanners(tools, available, local_files, live_urls,
-                                          metrics, tool_raw_counts)
+                                          metrics, tool_raw_counts, sec_raw)
             merged = self._merge(per_tool, scope.target)
 
         # temp JS deleted (context manager) — persist from memory.
@@ -232,22 +223,31 @@ class JsSecretWorker(BaseWorker):
             self._persist_secrets(db, program, scope, host_map, merged, now, metrics)
 
     def _run_scanners(self, tools, available, local_files, live_urls,
-                      metrics, tool_raw_counts) -> dict[str, list]:
+                      metrics, tool_raw_counts, sec_raw=None) -> dict[str, list]:
         """Run every available scanner in parallel. Returns {tool: [RawSecret]}.
 
         ``live_urls`` are only the URLs that downloaded successfully this batch, so
         the URL-based scanners (Mantra/Nuclei) never waste time re-fetching dead
         ones.
+
+        When ``sec_raw`` is given, each scanner's raw output for this batch is
+        persisted to ``secrets/raw/<tool>.batch-N.<ext>`` so a zero-result run can
+        be told apart from a broken/empty one.
         """
         results: dict[str, list] = {}
 
         def _run(name: str):
             t0 = time.monotonic()
             tool = tools[name]
-            if name == SECRETFINDER:
-                found = tool.run(local_files)
-            else:  # Mantra / Nuclei take URLs
-                found = tool.run(live_urls)
+            try:
+                if name == SECRETFINDER:
+                    found = tool.run(local_files)
+                else:  # Mantra / Nuclei take URLs
+                    found = tool.run(live_urls)
+            finally:
+                # Persist raw output even if the tool raised (e.g. nuclei timeout)
+                # — a failed/empty run is exactly what we most need to inspect.
+                self._save_scanner_raw(sec_raw, name, tool)
             self.logger.info("Tool=%s inputs=%d raw_secrets=%d status=SUCCESS time=%dms",
                              name, len(local_files) if name == SECRETFINDER else len(live_urls),
                              len(found), int((time.monotonic() - t0) * 1000))
@@ -268,6 +268,24 @@ class JsSecretWorker(BaseWorker):
         metrics.mantra_count += len(results.get(MANTRA, []))
         metrics.nuclei_count += len(results.get(NUCLEI, []))
         return results
+
+    def _save_scanner_raw(self, sec_raw, name: str, tool) -> None:
+        """Persist a scanner's raw output for this batch to ``secrets/raw/``.
+
+        One file per tool per batch: ``<tool>.batch-N.<ext>`` (``.jsonl`` for
+        Nuclei, ``.txt`` for SecretFinder/Mantra). Best-effort: a persistence
+        failure must never affect the scan. An empty output still writes an empty
+        file, so a silent zero-result run is visible on disk.
+        """
+        if sec_raw is None:
+            return
+        raw = getattr(tool, "last_raw_output", "") or ""
+        ext = "jsonl" if name == NUCLEI else "txt"
+        fname = f"{name.lower()}.batch-{self._batch_index}.{ext}"
+        try:
+            (Path(sec_raw) / fname).write_text(raw, encoding="utf-8")
+        except OSError as exc:
+            self.logger.warning("Failed to persist raw output %s: %s", fname, exc)
 
     def _merge(self, per_tool: dict[str, list], scope_target: str) -> dict[str, dict]:
         """Classify, normalize, fingerprint, and merge secrets across scanners.
@@ -470,26 +488,6 @@ class JsSecretWorker(BaseWorker):
         program = self.program_service.get_program(db=db, program_id=scan_run.program_id)
         scope = self.scope_service.get_scope(db=db, scope_id=scan_run.scope_id)
         return scan_run, program, scope
-
-    def _chain_parameter_discovery(self, db, program_id: uuid.UUID, scope_id: uuid.UUID) -> None:
-        """Create a PARAMETER_DISCOVERY ScanRun and enqueue it (Phase 6.4)."""
-        from backend.services.scan_run_service import ScanRunService
-        from database.models.enums import ScanStatus, ScanType
-
-        svc = ScanRunService()
-        param_scan = svc.create_scan_run(
-            db=db, program_id=program_id, scope_id=scope_id,
-            scan_type=ScanType.PARAMETER_DISCOVERY.value,
-            worker_name="parameter_discovery_worker",
-            status=ScanStatus.PENDING.value,
-        )
-        celery_app.send_task(
-            "workers.parameter_discovery_worker.run_parameter_discovery_scan",
-            args=[str(param_scan.id)], countdown=2,
-        )
-        self.logger.info("Chained parameter discovery scan %s for scope %s",
-                         param_scan.id, scope_id)
-
 
 @celery_app.task(name="workers.js_secret_worker.run_js_secret_scan", bind=True)
 def run_js_secret_scan(self, scan_run_id: str) -> None:

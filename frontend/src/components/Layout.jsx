@@ -34,6 +34,7 @@ export default function Layout() {
     ? [
         { to: `/scopes/${scopeId}`, label: 'Overview', Icon: GaugeIcon, end: true },
         { to: `/scopes/${scopeId}/subdomains`, label: 'Subdomains', Icon: GlobeIcon },
+        { to: `/scopes/${scopeId}/live`, label: 'Live Domains', Icon: PulseIcon },
         { to: `/scopes/${scopeId}/content`, label: 'Asset Explorer', Icon: LayersIcon },
         { to: `/scopes/${scopeId}/secrets`, label: 'Secrets', Icon: RadarIcon },
         { to: `/scopes/${scopeId}/scans`, label: 'Scans', Icon: PulseIcon },
