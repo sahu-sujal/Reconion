@@ -63,7 +63,7 @@ export default function ScanReport({ scanId }) {
     ['Resolved', report.resolved_count],
     ['New hosts', report.new_hosts_count],
     ['httpx', report.httpx_count],
-    ['Live', report.live_count],
+    ['Live hosts', report.live_count],
     ['New live', report.new_live_count],
   ]
   const hasMetrics = metrics.some(([, v]) => v)

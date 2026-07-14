@@ -507,7 +507,7 @@ Poll `GET /scans/{id}` (or `/report`) for progress. See
 | `records_found` | int | legacy aggregate (= `unique_count`) |
 | `subfinder_count`, `assetfinder_count`, `merged_count`, `unique_count`, `new_count`, `existing_count` | int | subdomain phase |
 | `dnsx_count`, `resolved_count`, `new_hosts_count` | int | DNS phase |
-| `httpx_count`, `live_count`, `new_live_count` | int | HTTP phase |
+| `httpx_count`, `live_count`, `new_live_count` | int | HTTP phase (`live_count` and `new_live_count` are unique hostnames; raw httpx output may contain multiple URLs per host) |
 | `error_message` | string\|null | set on FAILED |
 | `started_at` | datetime | |
 | `finished_at` | datetime\|null | |

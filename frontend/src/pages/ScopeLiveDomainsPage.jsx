@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { scopesApi } from '../api/scopes'
+import { storageUrl } from '../api/client'
 import { SearchIcon, ChevronRightIcon } from '../components/icons'
 import DomainDetailDrawer from '../components/DomainDetailDrawer'
 
@@ -170,7 +171,7 @@ export default function ScopeLiveDomainsPage() {
           <h1>Live Domains</h1>
           <p className="subtitle">
             {hosts.length} live host{hosts.length === 1 ? '' : 's'} · resolved &amp; responding to
-            HTTP · click any row for full detail
+            HTTP · select a card to slide through full details
           </p>
         </div>
       </header>
@@ -259,38 +260,45 @@ export default function ScopeLiveDomainsPage() {
           </button>
         </div>
       ) : (
-        <table className="data-table clickable-rows">
-          <thead>
-            <tr>
-              <th>Domain</th>
-              <th>Status</th>
-              <th>Port</th>
-              <th>Title</th>
-              <th>Technologies</th>
-              <th>URL</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
+        <div className="domain-catalog">
             {pageRows.map((h, i) => {
               const techs = indices.techByHostId.get(h.id) || []
+              const shots = indices.shotsByHostId.get(h.id) || []
+              const screenshot = shots.find((shot) => shot.file_path && !shot.failed)
+              const imagePath = screenshot?.file_path || h.screenshot_path
               const url = hostUrl(h)
               const filteredIdx = page * PAGE_SIZE + i
               return (
-                <tr
+                <article
                   key={h.id}
-                  className="row-clickable"
+                  className="domain-catalog-card"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View details for ${h.host}`}
                   onClick={() => setSelectedIdx(filteredIdx)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setSelectedIdx(filteredIdx)
+                    }
+                  }}
                 >
-                  <td className="cell-mono">{h.host}</td>
-                  <td>
+                  <div className={`domain-catalog-preview${imagePath ? '' : ' empty'}`}>
+                    {imagePath ? (
+                      <img src={storageUrl(imagePath)} alt="" loading="lazy" />
+                    ) : (
+                      <span>{h.host.slice(0, 1).toUpperCase()}</span>
+                    )}
                     <StatusPill code={h.status_code} />
-                  </td>
-                  <td className="cell-mono">{h.port ?? '—'}</td>
-                  <td className="cell-title">{h.title || '—'}</td>
-                  <td>
+                  </div>
+                  <div className="domain-catalog-body">
+                    <div className="domain-catalog-heading">
+                      <h2 className="cell-mono">{h.host}</h2>
+                      <ChevronRightIcon className="row-chevron" width={16} height={16} />
+                    </div>
+                    <p className="domain-catalog-title">{h.title || 'No page title detected'}</p>
                     {techs.length > 0 ? (
-                      <span className="flag-tags wrap">
+                      <div className="flag-tags wrap">
                         {techs.slice(0, 3).map((t) => (
                           <span key={t.id} className="badge badge-type">
                             {t.technology}
@@ -299,29 +307,26 @@ export default function ScopeLiveDomainsPage() {
                         {techs.length > 3 && (
                           <span className="muted">+{techs.length - 3}</span>
                         )}
-                      </span>
+                      </div>
                     ) : (
-                      <span className="muted">—</span>
+                      <span className="muted domain-catalog-no-tech">No technologies detected</span>
                     )}
-                  </td>
-                  <td className="cell-mono">
+                  </div>
+                  <footer className="domain-catalog-footer">
+                    <span className="cell-mono">{h.scheme || 'http'}{h.port ? ` · :${h.port}` : ''}</span>
                     <a
                       href={url}
                       target="_blank"
                       rel="noreferrer noopener"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {url}
+                      Open ↗
                     </a>
-                  </td>
-                  <td>
-                    <ChevronRightIcon className="row-chevron" width={16} height={16} />
-                  </td>
-                </tr>
+                  </footer>
+                </article>
               )
             })}
-          </tbody>
-        </table>
+        </div>
       )}
 
       {/* ---- Pagination (client-side over filtered result) ---- */}

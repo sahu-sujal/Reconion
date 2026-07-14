@@ -41,6 +41,8 @@ DB_BATCH_SIZE = 5_000
 @dataclass
 class HttpMetrics:
     httpx_input: int = 0
+    # Hostnames, not individual HTTP responses.  httpx may return more than
+    # one response for a hostname because we probe several ports.
     httpx_live: int = 0
     new_live: int = 0
     http_responses_inserted: int = 0
@@ -109,7 +111,11 @@ class HttpScanWorker(BaseWorker):
             try:
                 runner = HttpxRunner(timeout=900, threads=200)
                 http_records: list[HttpxRecord] = runner.probe(hosts)
-                metrics.httpx_live = len(http_records)
+                # A live-domain row is a Host row, whose unique key is the
+                # hostname.  Keep this metric in the same unit as the Live
+                # Domains page and records_found; raw httpx output can still
+                # contain several URLs (for example :80 and :443) per host.
+                metrics.httpx_live = len({record.host for record in http_records})
 
                 # Persist raw httpx JSON to disk
                 raw_path = raw_dir / "httpx.json"
@@ -130,7 +136,7 @@ class HttpScanWorker(BaseWorker):
 
                 self._finalize_tool_execution(
                     db, exec_rec, ToolExecutionStatus.COMPLETED,
-                    raw_records_found=metrics.httpx_input,
+                    raw_records_found=len(http_records),
                     records_found=metrics.httpx_live,
                 )
             except RuntimeError as exc:
@@ -144,9 +150,11 @@ class HttpScanWorker(BaseWorker):
                 db, scope.id, program.id, http_records, now, metrics,
             )
 
-            # Write processed file — live URLs
+            # Write processed file — one line per live URL.  httpx can emit
+            # duplicate JSON records for the same URL, so do not carry those
+            # duplicates into the processed artifact.
             proc_path = proc_dir / "live.txt"
-            proc_path.write_text("\n".join(sorted(live_urls)), encoding="utf-8")
+            proc_path.write_text("\n".join(sorted(set(live_urls))), encoding="utf-8")
 
             # ---- Step 6: Metrics --------------------------------------- #
             self._update_scan_metrics(db, scan_run.id, metrics)
@@ -227,10 +235,13 @@ class HttpScanWorker(BaseWorker):
         """Update Host rows and upsert HttpResponse + Technology rows."""
         live_urls: list[str] = []
 
-        # Build host→record map (keep first record per host for update)
+        # A Host stores one summary response, whereas HttpResponse preserves
+        # every URL response.  Select a deterministic summary record for each
+        # host so multiple ports do not produce duplicate UPDATE source rows.
         host_map: dict[str, HttpxRecord] = {}
         for rec in http_records:
-            if rec.host not in host_map:
+            current = host_map.get(rec.host)
+            if current is None or self._host_record_sort_key(rec) < self._host_record_sort_key(current):
                 host_map[rec.host] = rec
 
         # Fetch existing host IDs for this scope in one query
@@ -245,12 +256,12 @@ class HttpScanWorker(BaseWorker):
         prev_live: set[str] = {r.host for r in host_rows_db if r.status_code is not None}
         counted_new_live: set[str] = set()
 
-        for start in range(0, len(http_records), DB_BATCH_SIZE):
-            batch = http_records[start:start + DB_BATCH_SIZE]
-
-            # ---- Update Host rows with HTTP metadata (single statement) ----
+        # Update one Host row per hostname.  Responses and technologies below
+        # deliberately use every record because they are URL-level data.
+        host_records = list(host_map.values())
+        for start in range(0, len(host_records), DB_BATCH_SIZE):
             host_updates: list[dict[str, Any]] = []
-            for rec in batch:
+            for rec in host_records[start:start + DB_BATCH_SIZE]:
                 host_id = host_name_to_id.get(rec.host)
                 if not host_id:
                     continue
@@ -271,6 +282,9 @@ class HttpScanWorker(BaseWorker):
                     "last_seen": now,
                 })
             self.host_repo.bulk_update_http_fields(db, host_updates)
+
+        for start in range(0, len(http_records), DB_BATCH_SIZE):
+            batch = http_records[start:start + DB_BATCH_SIZE]
 
             # ---- Upsert HttpResponse rows ----
             http_rows: list[dict[str, Any]] = []
@@ -331,6 +345,14 @@ class HttpScanWorker(BaseWorker):
                 metrics.technologies_found += self._upsert_technologies(db, tech_rows, now)
 
         return live_urls
+
+    @staticmethod
+    def _host_record_sort_key(rec: HttpxRecord) -> tuple[int, int, int, str]:
+        """Prefer a successful HTTPS/default-port response for Host summary."""
+        status_rank = 0 if rec.status_code is not None and 200 <= rec.status_code < 400 else 1
+        scheme_rank = 0 if rec.scheme == "https" else 1
+        default_port_rank = 0 if rec.port in (80, 443, None) else 1
+        return (status_rank, scheme_rank, default_port_rank, rec.url)
 
     def _upsert_technologies(self, db, rows: list[dict[str, Any]], now: datetime) -> int:
         """Upsert technologies; returns count of inserted rows."""
