@@ -74,14 +74,14 @@ class HttpScanWorker(BaseWorker):
             scan_run_uuid = uuid.UUID(scan_run_id)
             scan_run, program, scope = self._load_scan_data(db, scan_run_uuid)
 
-            # Resume path: paused before chaining → just chain content discovery.
+            # Resume path: paused before chaining → just chain screenshots.
             resume = scan_run.resume_state or {}
-            if resume.get("pending_chain") == "CONTENT_DISCOVERY":
+            if resume.get("pending_chain") == "SCREENSHOT":
                 self.mark_completed(scan_run_id, records_found=scan_run.records_found or 0)
                 self.scan_run_service.update_scan_run(
                     db=db, scan_run_id=scan_run_id, clear_resume_state=True,
                 )
-                self._chain_content_discovery(db, program.id, scope.id)
+                self._chain_screenshot_scan(db, program.id, scope.id)
                 return
 
             self.mark_running(scan_run_id)
@@ -175,22 +175,22 @@ class HttpScanWorker(BaseWorker):
                 metrics=metrics,
             )
 
-            # ---- Step 8: Chain content discovery ----------------------- #
+            # ---- Step 8: Chain screenshot capture ---------------------- #
             if metrics.httpx_live > 0:
                 signal = self.check_control(scan_run_id)
                 if signal == "STOP":
-                    self.logger.info("Scan %s stopped before chaining content discovery", scan_run_id)
+                    self.logger.info("Scan %s stopped before chaining screenshots", scan_run_id)
                     self.mark_cancelled(scan_run_id)
                     return
                 if signal == "PAUSE":
-                    self.logger.info("Scan %s paused before chaining content discovery", scan_run_id)
-                    self.mark_paused(scan_run_id, resume_state={"pending_chain": "CONTENT_DISCOVERY"})
+                    self.logger.info("Scan %s paused before chaining screenshots", scan_run_id)
+                    self.mark_paused(scan_run_id, resume_state={"pending_chain": "SCREENSHOT"})
                     return
                 try:
-                    self._chain_content_discovery(db, program.id, scope.id)
+                    self._chain_screenshot_scan(db, program.id, scope.id)
                 except Exception as chain_exc:
                     self.logger.warning(
-                        "Failed to chain content discovery after HTTP scan %s: %s",
+                        "Failed to chain screenshots after HTTP scan %s: %s",
                         scan_run_id, chain_exc,
                     )
 
@@ -387,26 +387,26 @@ class HttpScanWorker(BaseWorker):
         scope = self.scope_service.get_scope(db=db, scope_id=scan_run.scope_id)
         return scan_run, program, scope
 
-    def _chain_content_discovery(self, db, program_id: uuid.UUID, scope_id: uuid.UUID) -> None:
-        """Create a CONTENT_DISCOVERY ScanRun and enqueue run_url_scan."""
+    def _chain_screenshot_scan(self, db, program_id: uuid.UUID, scope_id: uuid.UUID) -> None:
+        """Create a SCREENSHOT ScanRun and enqueue the post-HTTP capture phase."""
         from backend.services.scan_run_service import ScanRunService
         from database.models.enums import ScanStatus, ScanType
 
         svc = ScanRunService()
-        url_scan = svc.create_scan_run(
+        screenshot_scan = svc.create_scan_run(
             db=db,
             program_id=program_id,
             scope_id=scope_id,
-            scan_type=ScanType.CONTENT_DISCOVERY.value,
-            worker_name="url_worker",
+            scan_type=ScanType.SCREENSHOT.value,
+            worker_name="screenshot_worker",
             status=ScanStatus.PENDING.value,
         )
         celery_app.send_task(
-            "workers.url.url_worker.run_url_scan",
-            args=[str(url_scan.id)],
+            "workers.http.screenshot_worker.run_screenshot_scan",
+            args=[str(screenshot_scan.id)],
             countdown=2,
         )
-        self.logger.info("Chained content discovery scan %s for scope %s", url_scan.id, scope_id)
+        self.logger.info("Chained screenshot scan %s for scope %s", screenshot_scan.id, scope_id)
 
     def _create_tool_execution(self, db, scan_run_id: uuid.UUID, tool_name: str, command: str):
         return self.tool_execution_repo.create(

@@ -1,6 +1,7 @@
 """Screenshot worker — captures page screenshots for live hosts with gowitness.
 
-Standalone phase (not auto-chained). Pipeline per scan:
+Post-HTTP phase. It captures visual evidence before content discovery begins.
+Pipeline per scan:
 
     1.  Load all live hosts (status_code set) for this scope from DB
     2.  Build one URL per host (scheme + host + port)
@@ -10,6 +11,7 @@ Standalone phase (not auto-chained). Pipeline per scan:
     5.  Update hosts.screenshot_count / hosts.screenshot_path
     6.  Update ScanRun metrics + record ToolExecution
     7.  Send Discord notification
+    8.  Chain content discovery
 """
 
 from __future__ import annotations
@@ -74,6 +76,18 @@ class ScreenshotWorker(BaseWorker):
         try:
             scan_run_uuid = uuid.UUID(scan_run_id)
             scan_run, program, scope = self._load_scan_data(db, scan_run_uuid)
+
+            # Resume path: paused after capture → only continue the
+            # downstream content-discovery phase.
+            resume = scan_run.resume_state or {}
+            if resume.get("pending_chain") == "CONTENT_DISCOVERY":
+                self.mark_completed(scan_run_id, records_found=scan_run.records_found or 0)
+                self.scan_run_service.update_scan_run(
+                    db=db, scan_run_id=scan_run_id, clear_resume_state=True,
+                )
+                self._chain_content_discovery(db, program.id, scope.id)
+                return
+
             self.mark_running(scan_run_id)
 
             self.storage_service.init_scope_directories_by_id(program.id, scope.id)
@@ -152,6 +166,24 @@ class ScreenshotWorker(BaseWorker):
                 )
             except Exception as exc:
                 self.logger.warning("Screenshot notification failed: %s", exc)
+
+            # ---- Step 8: Chain content discovery ----------------------- #
+            signal = self.check_control(scan_run_id)
+            if signal == "STOP":
+                self.logger.info("Scan %s stopped before chaining content discovery", scan_run_id)
+                self.mark_cancelled(scan_run_id)
+                return
+            if signal == "PAUSE":
+                self.logger.info("Scan %s paused before chaining content discovery", scan_run_id)
+                self.mark_paused(scan_run_id, resume_state={"pending_chain": "CONTENT_DISCOVERY"})
+                return
+            try:
+                self._chain_content_discovery(db, program.id, scope.id)
+            except Exception as chain_exc:
+                self.logger.warning(
+                    "Failed to chain content discovery after screenshot scan %s: %s",
+                    scan_run_id, chain_exc,
+                )
 
         except Exception as exc:
             self.logger.exception("Screenshot scan %s failed: %s", scan_run_id, exc)
@@ -275,6 +307,27 @@ class ScreenshotWorker(BaseWorker):
         program = self.program_service.get_program(db=db, program_id=scan_run.program_id)
         scope = self.scope_service.get_scope(db=db, scope_id=scan_run.scope_id)
         return scan_run, program, scope
+
+    def _chain_content_discovery(self, db, program_id: uuid.UUID, scope_id: uuid.UUID) -> None:
+        """Create a CONTENT_DISCOVERY ScanRun after screenshot capture."""
+        from backend.services.scan_run_service import ScanRunService
+        from database.models.enums import ScanStatus, ScanType
+
+        svc = ScanRunService()
+        url_scan = svc.create_scan_run(
+            db=db,
+            program_id=program_id,
+            scope_id=scope_id,
+            scan_type=ScanType.CONTENT_DISCOVERY.value,
+            worker_name="url_worker",
+            status=ScanStatus.PENDING.value,
+        )
+        celery_app.send_task(
+            "workers.url.url_worker.run_url_scan",
+            args=[str(url_scan.id)],
+            countdown=2,
+        )
+        self.logger.info("Chained content discovery scan %s for scope %s", url_scan.id, scope_id)
 
     def _create_tool_execution(self, db, scan_run_id: uuid.UUID, tool_name: str, command: str):
         return self.tool_execution_repo.create(
