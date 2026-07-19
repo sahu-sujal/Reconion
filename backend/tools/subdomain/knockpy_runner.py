@@ -15,9 +15,36 @@ from tools.common.tool_base import ToolBase
 # Resolve knockpy explicitly so the runner works regardless of how the worker
 # process was launched: the repo-bundled copy under tools/bin first, then the
 # system install.
-from tools.common.tool_paths import resolve_tool
+from tools.common.tool_paths import bundled_script, resolve_tool
 
 _KNOCKPY_BIN = resolve_tool("knockpy", fallbacks=("/usr/bin/knockpy",))
+
+#: knockpy reads its recon service list from here. It is NOT created by
+#: installing knockpy — ``knockpy --setup`` requires an interactive terminal, so
+#: on a provisioned server (systemd worker, container, CI) the file is simply
+#: absent. When it is, ``--recon`` queries nothing and knockpy exits with empty
+#: stdout, which previously surfaced as a silent "completed, 0 found".
+_RECON_CONFIG = Path.home() / ".knockpy" / "recon_services.json"
+
+
+def ensure_recon_config() -> bool:
+    """Install the repo-bundled ``recon_services.json`` if the user has none.
+
+    Returns True when the config is present (already or newly installed).
+    Idempotent and never raises — an existing config is never overwritten, so a
+    host with API keys configured keeps them.
+    """
+    if _RECON_CONFIG.is_file():
+        return True
+    source = bundled_script("knockpy", "recon_services.json")
+    if not source:
+        return False
+    try:
+        _RECON_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, _RECON_CONFIG)
+        return True
+    except OSError:
+        return False
 
 
 class KnockpyRunner(ToolBase):
@@ -63,6 +90,10 @@ class KnockpyRunner(ToolBase):
         # subdomains — the exact "empty scan, but manual run works" bug. KNOCKPY_DB
         # already contains the only artifact (the DB) that HOME was meant to
         # redirect, so overriding HOME is both unnecessary and harmful.
+        # Self-heal the recon config before running: without it --recon has no
+        # services to query and knockpy returns nothing at all.
+        ensure_recon_config()
+
         work_dir = tempfile.mkdtemp(prefix="knockpy_")
         env = dict(os.environ)
         env["KNOCKPY_DB"] = str(Path(work_dir) / "reports.db")
@@ -95,10 +126,13 @@ class KnockpyRunner(ToolBase):
             # silent "completed, 0 found".
             detail = (proc.stderr or "").strip().splitlines()
             hint = detail[-1] if detail else "no output on stdout or stderr"
+            config_state = (
+                "present" if _RECON_CONFIG.is_file()
+                else f"MISSING at {_RECON_CONFIG} (and no bundled copy to install)"
+            )
             raise RuntimeError(
                 f"knockpy produced no output (exit {proc.returncode}): {hint}. "
-                "If ~/.knockpy/recon_services.json is missing, run "
-                "`knockpy --setup` as the user that runs the worker."
+                f"recon config: {config_state}."
             )
 
         return _parse_knockpy_stdout(stdout)

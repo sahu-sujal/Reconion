@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "services": [
+    {
+      "name": "hackertarget",
+      "enabled": true,
+      "parser": "csv_first_column",
+      "url_template": "https://api.hackertarget.com/hostsearch/?q={domain}"
+    },
+    {
+      "name": "rapiddns",
+      "enabled": true,
+      "parser": "rapiddns_html_td",
+      "url_template": "https://rapiddns.io/subdomain/{domain}"
+    },
+    {
+      "name": "subdomaincenter",
+      "enabled": true,
+      "parser": "json_list",
+      "url_template": "https://api.subdomain.center/?domain={domain}"
+    },
+    {
+      "name": "virustotal",
+      "enabled": true,
+      "requires_api": "virustotal",
+      "parser": "virustotal_subdomains",
+      "url_template": "https://www.virustotal.com/vtapi/v2/domain/report?apikey={virustotal_key}&domain={domain}"
+    },
+    {
+      "name": "shodan",
+      "enabled": true,
+      "requires_api": "shodan",
+      "parser": "shodan_subdomains",
+      "url_template": "https://api.shodan.io/dns/domain/{domain}?key={shodan_key}"
+    }
+  ]
+}

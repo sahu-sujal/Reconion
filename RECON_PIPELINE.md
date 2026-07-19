@@ -124,7 +124,17 @@ GET /storage/programs/<pid>/scopes/<sid>/screenshots/<file>.jpeg
 
 > knockpy runs in a throwaway temp CWD with `KNOCKPY_DB` redirected so its
 > report/DB files never litter the repo. `HOME` is deliberately **not** overridden —
-> knockpy reads its API keys from `~/.knockpy/recon_services.json`.
+> knockpy reads its recon service list (and API keys) from
+> `~/.knockpy/recon_services.json`.
+>
+> **That config is a deploy dependency.** It is not created by installing
+> knockpy (`knockpy --setup` requires an interactive terminal, so it never runs
+> on a provisioned server). Without it `--recon` queries nothing and knockpy
+> exits with empty stdout. The runner therefore installs the repo-bundled
+> `tools/knockpy/recon_services.json` on first use if the user has none; an
+> existing file is never overwritten, so configured API keys are preserved.
+> Empty stdout is now a hard error (with the exit code + stderr written to
+> `subdomains/raw/knockpy.error.txt`) rather than a silent "completed, 0 found".
 
 **Compilation**
 
