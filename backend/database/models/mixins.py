@@ -3,8 +3,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, declared_attr
 
 
@@ -95,3 +95,34 @@ class AssetClassificationMixin:
     @declared_attr
     def is_credential(cls) -> Mapped[bool]:  # noqa: N805
         return mapped_column(Boolean, nullable=False, default=False, server_default="false", index=True)
+
+
+class GfClassificationMixin:
+    """GF (security-relevance) classification columns, shared by urls/endpoints.
+
+    Populated by the GF scan phase from stored data only — no network. Whereas
+    :class:`AssetClassificationMixin` answers "what kind of thing is this?",
+    these columns answer "why might this be interesting to an attacker?".
+
+    ``gf_tags`` is a JSONB array of gf category names (e.g. ``["sqli", "xss"]``)
+    kept free-form so new patterns can be added by dropping a JSON file into
+    ``tools/gf-patterns/`` — no schema change. It is GIN-indexed per table so
+    membership queries (``gf_tags ? 'sqli'``) stay fast on large inventories.
+    ``gf_tag_count`` is denormalized so "has any match" filtering and sorting
+    avoid unnesting the array.
+    """
+
+    @declared_attr
+    def gf_tags(cls) -> Mapped[list]:  # noqa: N805
+        return mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+
+    @declared_attr
+    def gf_tag_count(cls) -> Mapped[int]:  # noqa: N805
+        return mapped_column(
+            Integer, nullable=False, default=0, server_default="0", index=True,
+        )
+
+    #: When the GF classifier last ran for this row (NULL = never classified).
+    gf_classified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )

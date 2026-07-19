@@ -56,7 +56,7 @@ _UUID_RE = re.compile(
     re.IGNORECASE,
 )
 
-_PHASES_WITH_SUBDIRS = ("subdomains", "dns", "http", "live", "urls", "js", "nuclei")
+_PHASES_WITH_SUBDIRS = ("subdomains", "dns", "http", "live", "urls", "js", "nuclei", "gf")
 _PHASES_FLAT = ("diff", "logs", "screenshots", "reports")
 
 

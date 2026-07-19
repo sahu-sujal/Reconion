@@ -59,6 +59,10 @@ class ScanService:
             "workers.http.screenshot_worker.run_screenshot_scan",
             "screenshot_worker",
         ),
+        ScanType.GF.value: (
+            "workers.gf.gf_worker.run_gf_scan",
+            "gf_worker",
+        ),
     }
 
     def start_scan(

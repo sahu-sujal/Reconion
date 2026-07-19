@@ -204,11 +204,10 @@ class EndpointRepository(BaseRepository[Endpoint]):
         """
         if not rows:
             return [], []
-        # Scope guard: drop out-of-scope endpoints before writing (final safety
-        # net independent of the worker's merge-time filtering).
-        rows = self.enforce_scope(db, rows, host_key="host")
-        if not rows:
-            return [], []
+        # No host-based scope guard — see UrlRepository.bulk_upsert. Endpoints
+        # extracted from JS frequently point at third-party infrastructure that
+        # is still part of the target's real attack surface, so every one is
+        # stored; deduplication is the only reduction applied.
         # Deduplicate within the batch on the conflict key, merging discovery
         # tools so a single ON CONFLICT statement never touches a row twice.
         deduped: dict[tuple[Any, Any], dict[str, Any]] = {}

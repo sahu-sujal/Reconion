@@ -18,7 +18,12 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base
-from database.models.mixins import AssetClassificationMixin, TimestampMixin, UUIDMixin
+from database.models.mixins import (
+    AssetClassificationMixin,
+    GfClassificationMixin,
+    TimestampMixin,
+    UUIDMixin,
+)
 
 if TYPE_CHECKING:
     from database.models.host import Host
@@ -27,7 +32,7 @@ if TYPE_CHECKING:
     from database.models.url_source import UrlSource
 
 
-class URL(Base, UUIDMixin, TimestampMixin, AssetClassificationMixin):
+class URL(Base, UUIDMixin, TimestampMixin, AssetClassificationMixin, GfClassificationMixin):
     """A single discovered URL (Phase 5 — Content Discovery).
 
     Deduplication key is ``(scope_id, normalized_url)`` — every tool that

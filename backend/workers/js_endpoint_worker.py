@@ -55,7 +55,6 @@ from repositories.js_file_repository import JsFileRepository
 from repositories.subdomain_repository import SubdomainRepository
 from repositories.tool_execution_repository import ToolExecutionRepository
 from tools.common.endpoint_utils import resolve_endpoint
-from tools.common.scope_filter import is_host_in_scope
 from tools.javascript.jsluice import JsluiceRunner
 from tools.js_endpoint.js_download_manager import JsDownloadManager
 from tools.js_endpoint.linkfinder_runner import LinkFinderRunner
@@ -497,7 +496,6 @@ class JsEndpointWorker(BaseWorker):
         # Any downloaded JS URL — used only as a last-resort base for batch-tool
         # hits that happen to be relative (rare; usually they're absolute).
         fallback_base = next(iter(path_to_url.values()), None)
-        scope_target = getattr(self, "_scope_target", None)
 
         for tool_name, hits in per_tool.items():
             for raw, src_path in hits:
@@ -507,11 +505,11 @@ class JsEndpointWorker(BaseWorker):
                 resolved = resolve_endpoint(raw, base)
                 if resolved is None:
                     continue
-                # Scope gate: only keep endpoints whose host is in scope. A JS
-                # file often references off-scope CDN/third-party hosts that
-                # can't be reported — drop them so they're never stored.
-                if scope_target and not is_host_in_scope(resolved.host, scope_target):
-                    continue
+                # Every resolved endpoint is kept regardless of host. Targets
+                # routinely serve real attack surface from third-party
+                # infrastructure (S3/CloudFront and other SaaS vendors), so
+                # host-based filtering hid genuine findings. Deduplication (on
+                # the normalized URL) is the only reduction applied.
                 entry = merged.get(resolved.normalized_url)
                 if entry is None:
                     merged[resolved.normalized_url] = {
@@ -685,10 +683,15 @@ class JsEndpointWorker(BaseWorker):
     # ------------------------------------------------------------------
 
     def _build_extractors(self, scope_target: str) -> dict:
-        """Instantiate every endpoint extractor. Register new tools here only."""
+        """Instantiate every endpoint extractor. Register new tools here only.
+
+        XNLinkFinder is given an open scope filter ("*") deliberately: endpoints
+        on third-party infrastructure are kept, so the tool must not discard them
+        before the worker ever sees them.
+        """
         return {
             LINKFINDER: LinkFinderRunner(timeout=120),
-            XNLINKFINDER: XnLinkFinderRunner(timeout=300, scope_filter=scope_target or "*"),
+            XNLINKFINDER: XnLinkFinderRunner(timeout=300, scope_filter="*"),
             JSLUICE: JsluiceRunner(timeout=300, concurrency=4),
         }
 

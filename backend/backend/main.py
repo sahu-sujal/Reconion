@@ -16,6 +16,7 @@ from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 
 from backend.api.asset_routes import router as asset_router
 from backend.api.endpoint_routes import router as endpoint_router
+from backend.api.gf_routes import router as gf_router
 from backend.api.secret_routes import router as secret_router
 from backend.api.health_routes import router as health_router
 from backend.api.program_routes import router as program_router
@@ -39,6 +40,7 @@ DEFAULT_CORS_ORIGINS = [
     "http://127.0.0.1:5175",
     "https://reconion.vercel.app",
     "https://backend.clarixit.in",
+    "https://www.clarixit.in",
 ]
 
 
@@ -98,6 +100,7 @@ app.include_router(scan_router)
 app.include_router(endpoint_router)
 app.include_router(asset_router)
 app.include_router(secret_router)
+app.include_router(gf_router)
 
 # Serve stored recon artifacts (screenshots, etc.) as static files so the
 # frontend can render them directly. Only the programs tree is exposed.

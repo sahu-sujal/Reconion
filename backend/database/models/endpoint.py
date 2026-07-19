@@ -18,7 +18,12 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base
-from database.models.mixins import AssetClassificationMixin, TimestampMixin, UUIDMixin
+from database.models.mixins import (
+    AssetClassificationMixin,
+    GfClassificationMixin,
+    TimestampMixin,
+    UUIDMixin,
+)
 
 if TYPE_CHECKING:
     from database.models.endpoint_source import EndpointSource
@@ -28,7 +33,7 @@ if TYPE_CHECKING:
     from database.models.scope import Scope
 
 
-class Endpoint(Base, UUIDMixin, TimestampMixin, AssetClassificationMixin):
+class Endpoint(Base, UUIDMixin, TimestampMixin, AssetClassificationMixin, GfClassificationMixin):
     """A fully-qualified endpoint extracted from a JavaScript file (Phase 6.1).
 
     Every endpoint is stored as an **absolute** URL resolved against the JS file

@@ -43,7 +43,6 @@ from repositories.host_repository import HostRepository
 from repositories.js_file_repository import JsFileRepository
 from repositories.tool_execution_repository import ToolExecutionRepository
 from repositories.url_repository import URLRepository
-from tools.common.scope_filter import is_host_in_scope
 from tools.common.url_utils import is_js_url, parse_url
 from tools.url.gau_runner import GauRunner
 from tools.url.hakrawler_runner import HakrawlerRunner
@@ -119,10 +118,11 @@ class UrlScanWorker(BaseWorker):
 
             self.mark_running(scan_run_id)
 
-            # Scope target used to reject out-of-scope URLs/JS at merge time —
-            # in bug bounty, out-of-scope assets can't be reported, so they are
-            # never stored.
             self._scope_target = scope.target
+            # Original URL per dedup key. URLs are deduplicated on their
+            # normalized form but stored exactly as the tool emitted them, so
+            # nothing about the discovered URL is lost.
+            self._raw_by_normalized: dict[str, str] = {}
 
             self.storage_service.init_scope_directories_by_id(program.id, scope.id)
             urls_raw = self.storage_service.get_raw_path_by_id(program.id, scope.id, "urls")
@@ -379,21 +379,26 @@ class UrlScanWorker(BaseWorker):
         js_sources: dict[str, set[str]],
         force_js: bool = False,
     ) -> None:
-        """Normalize + deduplicate one tool's URLs into the shared source maps.
+        """Deduplicate one tool's URLs into the shared source maps.
 
-        Out-of-scope URLs/JS (any host not under the scope root domain) are
-        dropped here so they never reach the DB. ``force_js`` marks every input
-        as a JS file — used for JS-only discovery tools (subjs) whose output may
-        not always end in ``.js`` (e.g. ``/script?v=2``).
+        **Every** discovered URL is kept regardless of host — a target's assets
+        routinely live on third-party infrastructure (S3/CloudFront, other SaaS
+        vendors), and dropping those hid real attack surface. The normalized form
+        is used *only* as the deduplication key; the original URL as the tool
+        emitted it is preserved in ``self._raw_by_normalized`` and is what gets
+        stored in ``urls.url``.
+
+        ``force_js`` marks every input as a JS file — used for JS-only discovery
+        tools (subjs) whose output may not always end in ``.js``
+        (e.g. ``/script?v=2``).
         """
-        scope_target = getattr(self, "_scope_target", None)
+        raw_by_normalized = self._raw_by_normalized
         for raw in raw_urls:
             parsed = parse_url(raw)
             if parsed is None:
                 continue
-            # Scope gate: skip anything whose host isn't in scope.
-            if scope_target and not is_host_in_scope(parsed.host, scope_target):
-                continue
+            # Keep the first-seen original spelling for this dedup key.
+            raw_by_normalized.setdefault(parsed.normalized, parsed.raw)
             if force_js or is_js_url(raw):
                 js_sources.setdefault(parsed.normalized, set()).add(label)
                 # A JS file is also a URL — record it in both tables.
@@ -433,7 +438,9 @@ class UrlScanWorker(BaseWorker):
                     "program_id": program_id,
                     "scope_id": scope_id,
                     "host_id": host_id,
-                    "url": parsed.raw,
+                    # Store the URL exactly as discovered; normalized_url is only
+                    # the dedup key.
+                    "url": self._raw_by_normalized.get(normalized, parsed.raw),
                     "normalized_url": parsed.normalized,
                     "scheme": parsed.scheme,
                     "host": parsed.host[:255],

@@ -409,6 +409,71 @@ def send_screenshot_scan_notification(
     return False
 
 
+def send_gf_scan_notification(
+    webhook_url: str | None,
+    program_name: str,
+    scope_target: str,
+    metrics,              # GfMetrics dataclass — avoid circular import
+) -> bool:
+    """Send a structured Discord embed for a completed GF classification scan.
+
+    Never raises.
+    """
+    resolved_url = webhook_url or _get_webhook_url()
+    if not resolved_url:
+        logger.warning("Discord webhook URL not configured — GF notification skipped")
+        return False
+
+    has_matches = metrics.total_matched > 0
+    color = 0xFFA500 if has_matches else 0x5865F2
+    title = (
+        f"\U0001f3af {metrics.total_matched} GF-Tagged Asset(s)!"
+        if has_matches
+        else "\U0001f3af GF Scan Complete — No Matches"
+    )
+
+    block = "\n".join([
+        "```",
+        f"URLs scanned        {metrics.urls_scanned:>8}",
+        f"URLs matched        {metrics.urls_matched:>8}",
+        f"Endpoints scanned   {metrics.endpoints_scanned:>8}",
+        f"Endpoints matched   {metrics.endpoints_matched:>8}",
+        "```",
+    ])
+
+    top = metrics.category_counts.most_common(10)
+    top_lines = [f"  {name:<20} {count:>7}" for name, count in top]
+    top_block = "\n".join(["```", *top_lines, "```"]) if top_lines else "*(none)*"
+
+    embed = {
+        "title": title,
+        "description": "\n".join([
+            f"**Program:** {program_name}",
+            f"**Scope:** `{scope_target}`",
+            "",
+            "**Metrics:**",
+            block,
+            "",
+            "**Top Categories:**",
+            top_block,
+        ]),
+        "color": color,
+    }
+    payload = {"embeds": [embed]}
+
+    try:
+        _send_webhook(resolved_url, json.dumps(payload).encode("utf-8"))
+        logger.info("Discord GF notification sent: %s/%s", program_name, scope_target)
+        return True
+    except HTTPError as exc:
+        logger.warning("Discord webhook HTTP error %s %s", exc.code, exc.reason)
+    except URLError as exc:
+        logger.warning("Discord webhook URL error: %s", exc.reason)
+    except Exception as exc:
+        logger.warning("Discord GF notification failed: %s", exc)
+    return False
+
+
 # ------------------------------------------------------------------ #
 # Content discovery scan-complete notification (Phase 5)                #
 # ------------------------------------------------------------------ #

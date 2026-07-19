@@ -3,7 +3,10 @@ import { NavLink, Outlet, useMatch } from 'react-router-dom'
 import { healthApi } from '../api/stats'
 import { GridIcon, RadarIcon, GaugeIcon, GlobeIcon, PulseIcon, LayersIcon } from './icons'
 
-const GLOBAL_ITEMS = [{ to: '/', label: 'Programs', Icon: GridIcon, end: true }]
+const GLOBAL_ITEMS = [
+  { to: '/', label: 'Programs', Icon: GridIcon, end: true },
+  { to: '/gf', label: 'GF Intelligence', Icon: RadarIcon },
+]
 
 export default function Layout() {
   const [health, setHealth] = useState(null) // null = checking, true/false
@@ -37,6 +40,7 @@ export default function Layout() {
         { to: `/scopes/${scopeId}/live`, label: 'Live Domains', Icon: PulseIcon },
         { to: `/scopes/${scopeId}/content`, label: 'Asset Explorer', Icon: LayersIcon },
         { to: `/scopes/${scopeId}/secrets`, label: 'Secrets', Icon: RadarIcon },
+        { to: `/scopes/${scopeId}/gf`, label: 'GF Intelligence', Icon: LayersIcon },
         { to: `/scopes/${scopeId}/scans`, label: 'Scans', Icon: PulseIcon },
       ]
     : []
