@@ -107,9 +107,32 @@ def bundled_script(*parts: str) -> str | None:
 
     e.g. ``bundled_script("LinkFinder", "linkfinder.py")`` ->
     ``<repo>/tools/LinkFinder/linkfinder.py`` or ``None``.
+
+    Falls back to a **case-insensitive** lookup for each path segment. These
+    tools are cloned from GitHub, and the directory casing varies by how the
+    clone was made (``tools/SecretFinder`` vs ``tools/secretfinder``). On
+    case-sensitive Linux an exact-match-only lookup silently returns ``None``,
+    the tool is reported unavailable, and its whole scan step is skipped with no
+    output — which is exactly how a mis-cased clone hides itself.
     """
     candidate = TOOLS_DIR.joinpath(*parts)
-    return str(candidate) if candidate.is_file() else None
+    if candidate.is_file():
+        return str(candidate)
+
+    # Case-insensitive resolution, one segment at a time.
+    current = TOOLS_DIR
+    for part in parts:
+        if not current.is_dir():
+            return None
+        target = part.lower()
+        match = next(
+            (entry for entry in current.iterdir() if entry.name.lower() == target),
+            None,
+        )
+        if match is None:
+            return None
+        current = match
+    return str(current) if current.is_file() else None
 
 
 def resolve_tool(name: str, fallbacks: tuple[str, ...] = ()) -> str:

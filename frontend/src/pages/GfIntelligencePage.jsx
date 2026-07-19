@@ -107,7 +107,9 @@ export default function GfIntelligencePage() {
 
   const filters = useMemo(
     () => ({
-      scopeId: scopeId ? [scopeId] : undefined,
+      // Always scope-bound: GF classification is produced per scope, so this
+      // page never queries across scopes.
+      scopeId: [scopeId],
       category: selectedCategories.length ? selectedCategories : undefined,
       host: selectedHosts.length ? selectedHosts : undefined,
       assetType: selectedTypes.length ? selectedTypes : undefined,
@@ -122,9 +124,9 @@ export default function GfIntelligencePage() {
     setLoading(true)
     setError(null)
     try {
-      const scopeArg = scopeId ? { scopeId: [scopeId] } : {}
+      const scopeArg = { scopeId: [scopeId] }
       const [scopeData, statsData, cats, hostList] = await Promise.all([
-        scopeId ? scopesApi.get(scopeId).catch(() => null) : Promise.resolve(null),
+        scopesApi.get(scopeId).catch(() => null),
         gfApi.statistics({ ...scopeArg, top: 10 }).catch(() => null),
         gfApi.categories(scopeArg).catch(() => []),
         gfApi.hosts(scopeArg).catch(() => []),
@@ -269,12 +271,8 @@ export default function GfIntelligencePage() {
             <ChevronRightIcon className="crumb-sep" width={14} height={14} />
           </>
         )}
-        {scopeId && (
-          <>
-            <Link to={`/scopes/${scopeId}`}>{scope?.target || 'Scope'}</Link>
-            <ChevronRightIcon className="crumb-sep" width={14} height={14} />
-          </>
-        )}
+        <Link to={`/scopes/${scopeId}`}>{scope?.target || 'Scope'}</Link>
+        <ChevronRightIcon className="crumb-sep" width={14} height={14} />
         <span>GF Intelligence</span>
         {selectedCategories.length === 1 && (
           <>
@@ -324,11 +322,9 @@ export default function GfIntelligencePage() {
               No GF classifications yet — run a <strong>GF</strong> scan for this scope to
               tag its URLs and endpoints.
             </p>
-            {scopeId && (
-              <Link to={`/scopes/${scopeId}/scans`} className="btn btn-primary">
-                Go to scans
-              </Link>
-            )}
+            <Link to={`/scopes/${scopeId}/scans`} className="btn btn-primary">
+              Go to scans
+            </Link>
           </div>
         ) : (
           <div className="gf-category-grid">

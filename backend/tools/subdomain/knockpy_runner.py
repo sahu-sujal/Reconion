@@ -83,24 +83,53 @@ class KnockpyRunner(ToolBase):
             _sweep_stray_reports(target)
 
         if raw_report_dir is not None:
-            _save_json_report(raw_report_dir, proc.stdout)
+            _save_json_report(raw_report_dir, proc.stdout, proc.stderr, proc.returncode)
 
-        return _parse_knockpy_stdout(proc.stdout)
+        stdout = (proc.stdout or "").strip()
+        if not stdout:
+            # Empty stdout is never a legitimate "no subdomains" result — knockpy
+            # prints at least "[]". It means knockpy could not run: most often
+            # ~/.knockpy/recon_services.json is missing (run `knockpy --setup`),
+            # so --recon has no services to query. Raise instead of returning []
+            # so the scan reports a FAILED tool with a real message rather than a
+            # silent "completed, 0 found".
+            detail = (proc.stderr or "").strip().splitlines()
+            hint = detail[-1] if detail else "no output on stdout or stderr"
+            raise RuntimeError(
+                f"knockpy produced no output (exit {proc.returncode}): {hint}. "
+                "If ~/.knockpy/recon_services.json is missing, run "
+                "`knockpy --setup` as the user that runs the worker."
+            )
+
+        return _parse_knockpy_stdout(stdout)
 
 
-def _save_json_report(raw_report_dir: Path | str, stdout: str) -> None:
-    """Write knockpy's stdout JSON to ``<raw_report_dir>/knockpy.json``.
+def _save_json_report(
+    raw_report_dir: Path | str,
+    stdout: str,
+    stderr: str = "",
+    returncode: int | None = None,
+) -> None:
+    """Persist knockpy's output to ``<raw_report_dir>/``.
 
-    Best-effort: a failure to persist the report must never fail the scan, since
-    the parsed subdomain list is already returned separately.
+    Writes ``knockpy.json`` whenever there is stdout. When stdout is empty the
+    run failed, so ``knockpy.error.txt`` is written with the exit code and
+    stderr instead — previously nothing was written at all, which left a failed
+    knockpy indistinguishable from one that was never invoked.
+
+    Best-effort: a failure to persist must never fail the scan.
     """
-    stdout = stdout.strip()
-    if not stdout:
-        return
+    stdout = (stdout or "").strip()
     try:
         out_dir = Path(raw_report_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "knockpy.json").write_text(stdout, encoding="utf-8")
+        if stdout:
+            (out_dir / "knockpy.json").write_text(stdout, encoding="utf-8")
+        else:
+            (out_dir / "knockpy.error.txt").write_text(
+                f"exit_code={returncode}\n\n--- stderr ---\n{(stderr or '').strip()}\n",
+                encoding="utf-8",
+            )
     except OSError:
         pass
 

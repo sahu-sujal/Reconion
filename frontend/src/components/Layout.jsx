@@ -3,10 +3,9 @@ import { NavLink, Outlet, useMatch } from 'react-router-dom'
 import { healthApi } from '../api/stats'
 import { GridIcon, RadarIcon, GaugeIcon, GlobeIcon, PulseIcon, LayersIcon } from './icons'
 
-const GLOBAL_ITEMS = [
-  { to: '/', label: 'Programs', Icon: GridIcon, end: true },
-  { to: '/gf', label: 'GF Intelligence', Icon: RadarIcon },
-]
+// GF Intelligence is deliberately NOT here — GF classification is produced by a
+// per-scope scan, so it only appears in the scope nav below.
+const GLOBAL_ITEMS = [{ to: '/', label: 'Programs', Icon: GridIcon, end: true }]
 
 export default function Layout() {
   const [health, setHealth] = useState(null) // null = checking, true/false

@@ -16,7 +16,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from tools.common.tool_paths import repo_root
+from tools.common.tool_paths import bundled_script, repo_root
 from tools.javascript.secret_tool_base import RawSecret, SecretToolBase
 
 _CANDIDATE_PATHS = (
@@ -31,6 +31,12 @@ def _resolve_script() -> str | None:
     for c in _CANDIDATE_PATHS:
         if c and Path(c).is_file():
             return c
+    # Case-insensitive bundled lookup — the clone may be tools/secretfinder,
+    # and the script inside may be SecretFinder.py or secretfinder.py.
+    for name in ("SecretFinder.py", "secretfinder.py"):
+        found = bundled_script("SecretFinder", name)
+        if found:
+            return found
     return None
 
 

@@ -29,7 +29,6 @@ const router = createBrowserRouter([
       { path: 'scopes/:scopeId/endpoints', element: <ScopeEndpointsPage /> },
       { path: 'scopes/:scopeId/secrets', element: <ScopeSecretsPage /> },
       { path: 'scopes/:scopeId/gf', element: <GfIntelligencePage /> },
-      { path: 'gf', element: <GfIntelligencePage /> },
       { path: 'scopes/:scopeId/scans', element: <ScopeScansPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
