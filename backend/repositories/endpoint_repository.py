@@ -181,7 +181,7 @@ class EndpointRepository(BaseRepository[Endpoint]):
         return or_(Endpoint.host == domain, Endpoint.host.like(f"%.{safe}", escape="\\"))
 
     # ------------------------------------------------------------------
-    # Bulk upsert (ON CONFLICT scope_id, normalized_url)
+    # Bulk upsert (ON CONFLICT scope_id, digest(normalized_url))
     # ------------------------------------------------------------------
 
     _COLUMNS = (
@@ -297,7 +297,7 @@ class EndpointRepository(BaseRepository[Endpoint]):
                 query, fragment, discovery_tools, discovery_source,
                 source_js_file, first_seen, last_seen, created_at, updated_at
             FROM tmp_endpoint_upsert
-            ON CONFLICT (scope_id, normalized_url) DO UPDATE
+            ON CONFLICT (scope_id, digest(normalized_url, 'sha256')) DO UPDATE
             SET
                 last_seen  = EXCLUDED.last_seen,
                 host_id    = COALESCE(endpoints.host_id, EXCLUDED.host_id),
@@ -341,7 +341,12 @@ class EndpointRepository(BaseRepository[Endpoint]):
                  endpoints.discovery_tools || excluded.discovery_tools) AS t)
         """)
         upsert = stmt.on_conflict_do_update(
-            index_elements=["scope_id", "normalized_url"],
+            # Must mirror uq_endpoints_scope_normalized_hash exactly — the
+            # unique index is on the digest, not on the raw column.
+            index_elements=[
+                Endpoint.__table__.c.scope_id,
+                text("digest(normalized_url, 'sha256')"),
+            ],
             set_={
                 "last_seen": stmt.excluded.last_seen,
                 "host_id": func.coalesce(Endpoint.__table__.c.host_id, stmt.excluded.host_id),

@@ -12,7 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -47,11 +47,32 @@ class Endpoint(Base, UUIDMixin, TimestampMixin, AssetClassificationMixin, GfClas
 
     __tablename__ = "endpoints"
     __table_args__ = (
-        UniqueConstraint("scope_id", "normalized_url", name="uq_endpoints_scope_normalized"),
-        Index("ix_endpoints_normalized_url", "normalized_url"),
-        Index("ix_endpoints_program_id_normalized", "program_id", "normalized_url"),
-        Index("ix_endpoints_scope_id_normalized", "scope_id", "normalized_url"),
-        Index("ix_endpoints_host_id_normalized", "host_id", "normalized_url"),
+        # normalized_url is unbounded text and cannot be indexed directly: a
+        # btree entry tops out near 2704 bytes and extractors do emit URLs
+        # longer than that. Every index on it is built over
+        # digest(normalized_url, 'sha256') — fixed width, still an exact match
+        # on the full value. See migration t9o0p1q2r3s4.
+        Index(
+            "uq_endpoints_scope_normalized_hash",
+            "scope_id",
+            text("digest(normalized_url, 'sha256')"),
+            unique=True,
+        ),
+        Index(
+            "ix_endpoints_program_id_normalized_hash",
+            "program_id",
+            text("digest(normalized_url, 'sha256')"),
+        ),
+        Index(
+            "ix_endpoints_scope_id_normalized_hash",
+            "scope_id",
+            text("digest(normalized_url, 'sha256')"),
+        ),
+        Index(
+            "ix_endpoints_host_id_normalized_hash",
+            "host_id",
+            text("digest(normalized_url, 'sha256')"),
+        ),
         Index("ix_endpoints_js_file_id_created", "js_file_id", "created_at"),
         # GIN index for discovery_tools JSONB membership queries (?, @>).
         Index(

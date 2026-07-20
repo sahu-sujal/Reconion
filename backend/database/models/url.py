@@ -12,7 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -41,10 +41,28 @@ class URL(Base, UUIDMixin, TimestampMixin, AssetClassificationMixin, GfClassific
     """
 
     __tablename__ = "urls"
+    # normalized_url is unbounded text, so it cannot be indexed directly: a
+    # btree entry tops out near 2704 bytes and crawlers do emit URLs longer
+    # than that. Every index on it is therefore built over
+    # digest(normalized_url, 'sha256') — fixed width, and still an exact match
+    # on the full value. See migration t9o0p1q2r3s4.
     __table_args__ = (
-        UniqueConstraint("scope_id", "normalized_url", name="uq_urls_scope_normalized"),
-        Index("ix_urls_program_id_normalized", "program_id", "normalized_url"),
-        Index("ix_urls_host_id_normalized", "host_id", "normalized_url"),
+        Index(
+            "uq_urls_scope_normalized_hash",
+            "scope_id",
+            text("digest(normalized_url, 'sha256')"),
+            unique=True,
+        ),
+        Index(
+            "ix_urls_program_id_normalized_hash",
+            "program_id",
+            text("digest(normalized_url, 'sha256')"),
+        ),
+        Index(
+            "ix_urls_host_id_normalized_hash",
+            "host_id",
+            text("digest(normalized_url, 'sha256')"),
+        ),
     )
 
     program_id: Mapped[uuid.UUID] = mapped_column(
@@ -69,7 +87,9 @@ class URL(Base, UUIDMixin, TimestampMixin, AssetClassificationMixin, GfClassific
     )
 
     url: Mapped[str] = mapped_column(Text, nullable=False)
-    normalized_url: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    # No index=True: a direct btree on this column overflows on long URLs.
+    # Lookups go through the digest() expression indexes above.
+    normalized_url: Mapped[str] = mapped_column(Text, nullable=False)
     scheme: Mapped[str | None] = mapped_column(String(16), nullable=True)
     host: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     path: Mapped[str | None] = mapped_column(Text, nullable=True)

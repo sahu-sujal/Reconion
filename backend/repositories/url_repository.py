@@ -98,7 +98,7 @@ class URLRepository(BaseRepository[URL]):
         return [r[0] for r in rows if r[0]]
 
     # ------------------------------------------------------------------
-    # Bulk upsert (ON CONFLICT scope_id, normalized_url)
+    # Bulk upsert (ON CONFLICT scope_id, digest(normalized_url))
     # ------------------------------------------------------------------
 
     def bulk_upsert(
@@ -215,7 +215,7 @@ class URLRepository(BaseRepository[URL]):
                 directory, filename, depth, parameter_count, has_parameters,
                 status, source, first_seen, last_seen, created_at, updated_at
             FROM tmp_url_upsert
-            ON CONFLICT (scope_id, normalized_url) DO UPDATE
+            ON CONFLICT (scope_id, digest(normalized_url, 'sha256')) DO UPDATE
             SET
                 last_seen  = EXCLUDED.last_seen,
                 host_id    = COALESCE(urls.host_id, EXCLUDED.host_id),
@@ -246,7 +246,12 @@ class URLRepository(BaseRepository[URL]):
 
         stmt = pg_insert(URL.__table__).values(rows)
         upsert = stmt.on_conflict_do_update(
-            index_elements=["scope_id", "normalized_url"],
+            # Must mirror uq_urls_scope_normalized_hash exactly — the unique
+            # index is on the digest, not on the raw column.
+            index_elements=[
+                URL.__table__.c.scope_id,
+                text("digest(normalized_url, 'sha256')"),
+            ],
             set_={
                 "last_seen": stmt.excluded.last_seen,
                 "host_id": func.coalesce(URL.__table__.c.host_id, stmt.excluded.host_id),
