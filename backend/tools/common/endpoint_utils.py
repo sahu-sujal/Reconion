@@ -34,6 +34,8 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 
 _DEFAULT_PORTS = {"http": "80", "https": "443"}
 _MULTI_SLASH_RE = re.compile(r"/{2,}")
+# Whitespace / control characters — illegal in a URL request line (RFC 7230).
+_CTRL_WS_RE = re.compile(r"[\x00-\x20\x7f-\x9f]")
 
 # Raw hits we never treat as endpoints — LinkFinder/XNLinkFinder noise.
 _NOISE_PREFIXES = (
@@ -110,6 +112,11 @@ def normalize_absolute(absolute_url: str) -> ResolvedEndpoint | None:
 
     Returns ``None`` if the URL has no http(s) scheme or no host.
     """
+    # Whitespace / control chars are illegal in a request line (RFC 7230) but
+    # urlsplit accepts them silently — reject here so a crawler-mangled value
+    # never gets stored and then crashes at HTTP-request time.
+    if _CTRL_WS_RE.search(absolute_url):
+        return None
     try:
         parts = urlsplit(absolute_url)
     except ValueError:

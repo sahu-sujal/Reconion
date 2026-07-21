@@ -28,6 +28,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
+from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -151,7 +152,10 @@ class JsDownloadManager:
                     break  # will never succeed — don't retry
                 if attempt < self.retries:
                     time.sleep(0.5 * (attempt + 1))
-            except (URLError, TimeoutError, OSError, ValueError) as exc:
+            except (URLError, TimeoutError, OSError, ValueError, HTTPException) as exc:
+                # HTTPException covers http.client.InvalidURL — raised (not as a
+                # ValueError) when a crawler-mangled URL contains a control char
+                # like a space; it must be caught here or it escapes the batch.
                 last_err = exc
                 target.unlink(missing_ok=True)
                 if attempt < self.retries:

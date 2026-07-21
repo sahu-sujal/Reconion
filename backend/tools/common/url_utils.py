@@ -22,6 +22,12 @@ from urllib.parse import urlsplit, urlunsplit
 
 _DEFAULT_PORTS = {"http": "80", "https": "443"}
 _MULTI_SLASH_RE = re.compile(r"/{2,}")
+# Whitespace / control characters are illegal in a request line (RFC 7230).
+# ``urlsplit``/``urljoin`` silently accept them (they land in the path or query),
+# so a URL over-reported by a crawler from an HTML tag — e.g.
+# ``.../OneSignalSDK.js?ver=6.9.1' async='async`` — passes normalization and only
+# blows up later as ``http.client.InvalidURL`` at download time. Reject them here.
+_CTRL_WS_RE = re.compile(r"[\x00-\x20\x7f-\x9f]")
 # A conservative set of file extensions we treat as JavaScript assets.
 _JS_EXTENSIONS = {"js", "mjs", "cjs", "jsx", "ts", "tsx"}
 _JS_TAIL_RE = re.compile(r"\.(?:m|c)?js(?:x)?(?:\?|#|$)", re.IGNORECASE)
@@ -73,6 +79,11 @@ def normalize_url(raw: str) -> str | None:
         return None
     value = raw.strip()
     if not value:
+        return None
+    # A URL with an interior space / tab / newline / other control char is not a
+    # usable request target — reject rather than store a value that crashes at
+    # HTTP-request time.
+    if _CTRL_WS_RE.search(value):
         return None
 
     try:
