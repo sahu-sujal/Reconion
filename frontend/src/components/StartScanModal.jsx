@@ -54,6 +54,13 @@ const STAGES = [
     Icon: GlobeIcon,
     step: '★',
   },
+  {
+    type: 'CLASSIFICATION',
+    label: 'Asset classification',
+    desc: 'Re-classify every discovered URL, endpoint & JS file by what it is (API, JavaScript, Document, Credential…). Standalone, no network — safe to re-run. Also runs automatically after JS endpoint discovery. Does not chain.',
+    Icon: SearchIcon,
+    step: '★',
+  },
 ]
 
 export default function StartScanModal({ target, busy, activeScan, onStart, onClose }) {

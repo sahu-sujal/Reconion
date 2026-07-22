@@ -63,6 +63,10 @@ class ScanService:
             "workers.gf.gf_worker.run_gf_scan",
             "gf_worker",
         ),
+        ScanType.CLASSIFICATION.value: (
+            "workers.classification.classification_worker.run_classification_scan",
+            "classification_worker",
+        ),
     }
 
     def start_scan(

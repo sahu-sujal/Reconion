@@ -57,6 +57,7 @@ class ScanType(str, enum.Enum):
     TECHNOLOGY = "TECHNOLOGY"
     SCREENSHOT = "SCREENSHOT"
     GF = "GF"
+    CLASSIFICATION = "CLASSIFICATION"
 
 
 class UrlSource(str, enum.Enum):

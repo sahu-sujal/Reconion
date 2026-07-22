@@ -19,6 +19,7 @@ celery_app = Celery(
         "workers.http.http_worker",
         "workers.http.screenshot_worker",
         "workers.gf.gf_worker",
+        "workers.classification.classification_worker",
         "workers.url.url_worker",
         "workers.js_endpoint_worker",
         "workers.js_secret_worker",
