@@ -64,6 +64,18 @@ class GowitnessRunner(ToolBase):
             (p for p in cls._FALLBACKS if Path(p).is_file()), "gowitness"
         )
 
+    @staticmethod
+    def _chrome_args() -> list[str]:
+        """``--chrome-path`` flags pinning gowitness to a real Chrome build.
+
+        Empty when no browser is found, leaving gowitness to auto-discover (and
+        to produce its own error if that fails). See
+        :func:`tools.common.tool_paths.resolve_chrome` for why we pin at all.
+        """
+        from tools.common.tool_paths import resolve_chrome
+        chrome = resolve_chrome()
+        return ["--chrome-path", chrome] if chrome else []
+
     def validate(self) -> bool:
         try:
             result = run_command([self._resolve_binary(), "version"], timeout=10)
@@ -78,11 +90,16 @@ class GowitnessRunner(ToolBase):
             binary = self._resolve_binary()
             result = run_command([binary, "version"], timeout=10)
             out = (result.stdout or result.stderr).strip()
+            from tools.common.tool_paths import resolve_chrome
+            chrome = resolve_chrome()
             return {
                 "tool": self.tool_name,
                 "available": result.returncode == 0,
                 "binary": binary,
                 "version": out.splitlines()[-1] if out else "unknown",
+                # Screenshots need a browser; gowitness itself reports "ok" even
+                # when none is present, so expose what we resolved.
+                "chrome": chrome or "auto-discover (none found)",
             }
         except RuntimeError as exc:
             return {"tool": self.tool_name, "available": False, "error": str(exc)}
@@ -137,7 +154,7 @@ class GowitnessRunner(ToolBase):
                 "--write-jsonl-file", str(jsonl_path),
                 "--threads", str(self._threads),
                 "--timeout", "30",
-            ]
+            ] + self._chrome_args()
             result = run_command(cmd, timeout=self.timeout)
             if result.timed_out:
                 raise RuntimeError(f"gowitness timed out after {self.timeout}s")
@@ -150,9 +167,23 @@ class GowitnessRunner(ToolBase):
                     for output in (result.stdout, result.stderr)
                     if output.strip()
                 )
+                hint = ""
+                if "not a snap cgroup" in detail:
+                    # Auto-discovery picked the snap chromium wrapper, which
+                    # calls snapctl and refuses to run outside a snap cgroup
+                    # (i.e. under any systemd unit). We pin --chrome-path to
+                    # avoid this, so reaching here means no non-snap browser was
+                    # found on the host.
+                    hint = (
+                        " — gowitness fell back to the snap chromium, which "
+                        "cannot run under a systemd unit. Install a non-snap "
+                        "browser (e.g. google-chrome-stable) or set CHROME_PATH "
+                        "to one."
+                    )
                 raise RuntimeError(
                     f"gowitness exited with status {result.returncode}"
                     + (f": {detail}" if detail else "")
+                    + hint
                 )
             return self._parse_jsonl(jsonl_path)
         finally:

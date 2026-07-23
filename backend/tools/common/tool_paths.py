@@ -135,6 +135,56 @@ def bundled_script(*parts: str) -> str | None:
     return str(current) if current.is_file() else None
 
 
+# Real (non-snap) Chrome/Chromium builds, most-preferred first. Snap paths are
+# deliberately excluded — see resolve_chrome().
+_CHROME_CANDIDATES = (
+    "/opt/google/chrome/chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/lib/chromium/chromium",
+    "/usr/lib/chromium-browser/chromium-browser",
+)
+
+
+def resolve_chrome() -> str | None:
+    """Locate a real Chrome/Chromium binary for headless browser tools.
+
+    Returns ``None`` if nothing suitable is found, letting the caller fall back
+    to the tool's own auto-discovery.
+
+    Why this exists: gowitness (and other chromedp-based tools) auto-discover a
+    browser by probing well-known locations, and that probe consults ``snapctl``
+    for the snap-packaged ``chromium``. Under a systemd unit the process cgroup
+    is ``/system.slice/<unit>.service``, not a snap cgroup, so ``snapctl`` aborts
+    with "is not a snap cgroup for tag snap.chromium.chromium" and the whole
+    scan fails before a single page is loaded. The same command run from an
+    interactive shell succeeds, which makes this look intermittent.
+
+    Passing an explicit ``--chrome-path`` skips that discovery entirely, so we
+    resolve a non-snap binary ourselves. ``CHROME_PATH`` overrides everything for
+    hosts that keep the browser somewhere unusual.
+    """
+    override = os.getenv("CHROME_PATH")
+    if override:
+        candidate = Path(override).expanduser()
+        if candidate.is_file():
+            return str(candidate)
+
+    for path in _CHROME_CANDIDATES:
+        if Path(path).is_file():
+            return path
+
+    # PATH lookup last: a "chromium" here may be a snap wrapper (a shim under
+    # /snap/bin), which is exactly what breaks under systemd, so skip those.
+    for name in ("google-chrome-stable", "google-chrome", "chromium", "chromium-browser"):
+        found = shutil.which(name)
+        if found and "/snap/" not in str(Path(found).resolve()):
+            return found
+    return None
+
+
 def resolve_tool(name: str, fallbacks: tuple[str, ...] = ()) -> str:
     """Resolve an executable: bundled ``tools/bin`` first, then *fallbacks*,
     then a ``PATH`` lookup, finally the bare name (so the caller's own
