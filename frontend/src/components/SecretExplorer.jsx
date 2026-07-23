@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { secretsApi, SECRET_SEVERITIES, SECRET_TOOLS } from '../api/secrets'
 
-const PAGE_SIZE = 25
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 250, 500]
+const DEFAULT_PAGE_SIZE = 100
 
 function formatDate(value) {
   if (!value) return '—'
@@ -71,11 +72,13 @@ const COLUMNS = [
  * The centralized Secret Inventory explorer (Phase 6.2).
  *
  * Modes: pass one of scopeId / programId / subdomainId / hostId / jsFileId.
+ * Optionally pass statsByType (the stats endpoint's by_type map) so the type
+ * filter lists every type in the inventory rather than only those on this page.
  * Secrets are shown UNMASKED (analysts must be able to verify/report). The
  * originating JavaScript file URL is clickable.
  */
 export default function SecretExplorer({
-  scopeId, programId, subdomainId, hostId, jsFileId, subdomainLabel,
+  scopeId, programId, subdomainId, hostId, jsFileId, subdomainLabel, statsByType,
 }) {
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
@@ -85,6 +88,7 @@ export default function SecretExplorer({
   const [sortBy, setSortBy] = useState('severity')
   const [sortDir, setSortDir] = useState('asc')
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const [data, setData] = useState({ total: 0, items: [] })
   const [loading, setLoading] = useState(false)
@@ -105,8 +109,8 @@ export default function SecretExplorer({
     setError(null)
     try {
       const opts = {
-        offset: page * PAGE_SIZE,
-        limit: PAGE_SIZE,
+        offset: page * pageSize,
+        limit: pageSize,
         search: debounced || undefined,
         severity: severity || undefined,
         secret_type: secretType || undefined,
@@ -128,13 +132,13 @@ export default function SecretExplorer({
       setLoading(false)
     }
   }, [scopeId, programId, subdomainId, hostId, jsFileId,
-      debounced, severity, secretType, tool, sortBy, sortDir, page])
+      debounced, severity, secretType, tool, sortBy, sortDir, page, pageSize])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { setPage(0) }, [severity, secretType, tool, sortBy, sortDir])
+  useEffect(() => { setPage(0) }, [severity, secretType, tool, sortBy, sortDir, pageSize])
 
   const total = data.total || 0
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const rows = data.items || []
 
   const toggleSort = (key) => {
@@ -143,8 +147,16 @@ export default function SecretExplorer({
   }
   const sortIndicator = (key) => (sortBy === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
 
-  // Distinct secret types present (for the filter dropdown) — from current page + all severities.
-  const typeOptions = Array.from(new Set(rows.map((r) => r.secret_type))).sort()
+  // Secret types for the filter dropdown. Sourced from the scope/program-wide
+  // stats (by_type) so every type is listed with its count — deriving them from
+  // `rows` would only ever show the types on the current page.
+  const typeOptions = statsByType
+    ? Object.entries(statsByType)
+        .filter(([, n]) => n > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([t, n]) => ({ value: t, label: `${t} (${n.toLocaleString()})` }))
+    : Array.from(new Set(rows.map((r) => r.secret_type))).sort()
+        .map((t) => ({ value: t, label: t }))
 
   return (
     <section className="panel">
@@ -169,8 +181,8 @@ export default function SecretExplorer({
         </select>
         <select className="input cd-host-select" value={secretType} onChange={(e) => setSecretType(e.target.value)}>
           <option value="">All types</option>
-          {(typeOptions.length ? typeOptions : []).map((t) => <option key={t} value={t}>{t}</option>)}
-          {secretType && !typeOptions.includes(secretType) && (
+          {typeOptions.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          {secretType && !typeOptions.some((t) => t.value === secretType) && (
             <option value={secretType}>{secretType}</option>
           )}
         </select>
@@ -243,13 +255,25 @@ export default function SecretExplorer({
         </div>
       )}
 
-      {total > PAGE_SIZE && (
+      {total > 0 && (
         <div className="cd-pager">
           <button type="button" className="btn btn-sm" disabled={page === 0 || loading}
+            onClick={() => setPage(0)}>« First</button>
+          <button type="button" className="btn btn-sm" disabled={page === 0 || loading}
             onClick={() => setPage((p) => Math.max(0, p - 1))}>← Prev</button>
-          <span className="muted">Page {page + 1} of {totalPages}</span>
+          <span className="muted">
+            {(page * pageSize + 1).toLocaleString()}–
+            {Math.min((page + 1) * pageSize, total).toLocaleString()} of{' '}
+            {total.toLocaleString()} · page {page + 1} of {totalPages}
+          </span>
           <button type="button" className="btn btn-sm" disabled={page >= totalPages - 1 || loading}
             onClick={() => setPage((p) => p + 1)}>Next →</button>
+          <button type="button" className="btn btn-sm" disabled={page >= totalPages - 1 || loading}
+            onClick={() => setPage(totalPages - 1)}>Last »</button>
+          <select className="input cd-host-select" value={pageSize} aria-label="Rows per page"
+            onChange={(e) => setPageSize(Number(e.target.value))}>
+            {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} / page</option>)}
+          </select>
         </div>
       )}
     </section>

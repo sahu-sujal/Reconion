@@ -84,6 +84,7 @@ export default function ScopeSecretsPage() {
         scopeId={scopeId}
         subdomainId={subdomainId}
         subdomainLabel={subdomainLabel}
+        statsByType={stats?.by_type}
       />
     </div>
   )
