@@ -13,6 +13,11 @@ def _root_domain(scope_target: str) -> str:
     return target
 
 
+#: Public alias — the root-domain normaliser is used outside this module (e.g.
+#: the GF read path restricts results to hosts at or under the scope root).
+root_domain = _root_domain
+
+
 def is_subdomain_in_scope(subdomain: str, scope_target: str) -> bool:
     """Return True if *subdomain* belongs to the scope target domain.
 

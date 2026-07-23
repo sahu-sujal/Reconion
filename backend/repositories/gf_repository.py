@@ -17,6 +17,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from tools.common.scope_filter import root_domain as _root_domain
+
 #: Columns selected from each inventory, aliased to one common shape.
 _URL_SELECT = """
     SELECT
@@ -97,6 +99,7 @@ class GfRepository:
         only_matched: bool,
         search: str | None,
         params: dict[str, Any],
+        scope_roots: list[str] | None = None,
     ) -> str:
         """Return a WHERE fragment for one inventory table.
 
@@ -115,6 +118,26 @@ class GfRepository:
         if hosts:
             clauses.append(f"{alias}.host = ANY(CAST(:hosts AS text[]))")
             params["hosts"] = list(hosts)
+
+        if scope_roots:
+            # Root-domain guard: keep only assets whose host is the scope root
+            # or a subdomain of it ("test.com" keeps test.com / api.test.com,
+            # drops cdn.cloudfront.net). Applied on read rather than at write
+            # time because the inventory deliberately stores third-party hosts
+            # (see UrlRepository.bulk_upsert) — GF Intelligence is a reporting
+            # view, so it shows only what is actually in scope.
+            # The host may carry a :port, so compare against the port-stripped
+            # value. host is indexed; split_part is cheap relative to the
+            # gf_tags GIN filter that runs alongside it.
+            ors = []
+            for i, root in enumerate(scope_roots):
+                key = f"root_{i}"
+                ors.append(
+                    f"(split_part({alias}.host, ':', 1) = :{key}"
+                    f" OR split_part({alias}.host, ':', 1) LIKE '%.' || :{key})"
+                )
+                params[key] = root
+            clauses.append("(" + " OR ".join(ors) + ")")
 
         if categories:
             # @> uses the GIN index. match_all → must contain every tag;
@@ -139,6 +162,45 @@ class GfRepository:
             params["search"] = f"%{search}%"
 
         return (" WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    def _scope_roots(self, db: Session, scope_ids, program_ids) -> list[str]:
+        """Resolve the root domains the query is bound to.
+
+        Returns the normalised (wildcard-stripped, lower-cased) target of every
+        scope in play, so the caller can restrict results to hosts at or under
+        those roots. An unresolvable scope contributes nothing rather than
+        silently widening the query.
+        """
+        if scope_ids:
+            where, params = "id = ANY(CAST(:ids AS uuid[]))", {"ids": [str(s) for s in scope_ids]}
+        elif program_ids:
+            where, params = "program_id = ANY(CAST(:ids AS uuid[]))", {"ids": [str(p) for p in program_ids]}
+        else:
+            return []
+        targets = db.execute(
+            text(f"SELECT target FROM scopes WHERE {where}"), params,
+        ).scalars().all()
+        return sorted({_root_domain(t) for t in targets if t})
+
+    def _root_clause(self, db: Session, scope_ids, program_ids, params: dict[str, Any]) -> str:
+        """AND-fragment restricting an unaliased query to in-scope hosts.
+
+        Counterpart to the ``scope_roots`` handling in :meth:`_build_filters`,
+        for the aggregate queries that build their own SQL rather than going
+        through the UNION helper.
+        """
+        roots = self._scope_roots(db, scope_ids, program_ids)
+        if not roots:
+            return ""
+        ors = []
+        for i, root in enumerate(roots):
+            key = f"root_{i}"
+            ors.append(
+                f"(split_part(host, ':', 1) = :{key}"
+                f" OR split_part(host, ':', 1) LIKE '%.' || :{key})"
+            )
+            params[key] = root
+        return " AND (" + " OR ".join(ors) + ")"
 
     def _union_sql(self, params: dict[str, Any], **filter_kwargs: Any) -> str:
         """Build the filtered UNION ALL over urls + endpoints."""
@@ -181,6 +243,7 @@ class GfRepository:
             program_ids=program_ids, scope_ids=scope_ids, hosts=hosts,
             asset_types=asset_types, categories=categories, match_all=match_all,
             only_matched=only_matched, search=search,
+            scope_roots=self._scope_roots(db, scope_ids, program_ids),
         )
         column = _SORTABLE.get(sort_by, "gf_tag_count")
         direction = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
@@ -199,6 +262,12 @@ class GfRepository:
 
     def count_assets(self, db: Session, **filters: Any) -> int:
         params: dict[str, Any] = {}
+        # Must apply the same root-domain guard as list_assets, or the reported
+        # total would not match the rows actually returned.
+        filters.setdefault(
+            "scope_roots",
+            self._scope_roots(db, filters.get("scope_ids"), filters.get("program_ids")),
+        )
         union = self._union_sql(params, **filters)
         return int(db.execute(
             text(f"SELECT COUNT(*) FROM ({union}) AS a"), params,
@@ -241,6 +310,7 @@ class GfRepository:
         if scope_ids:
             scope_clause += " AND scope_id = ANY(CAST(:scope_ids AS uuid[]))"
             params["scope_ids"] = [str(s) for s in scope_ids]
+        scope_clause += self._root_clause(db, scope_ids, program_ids, params)
 
         rows = db.execute(
             text(f"""
@@ -285,6 +355,7 @@ class GfRepository:
         if scope_ids:
             where += " AND scope_id = ANY(CAST(:scope_ids AS uuid[]))"
             params["scope_ids"] = [str(s) for s in scope_ids]
+        where += self._root_clause(db, scope_ids, program_ids, params)
 
         base = f"""
             SELECT id, host, program_id, scope_id, gf_tags, gf_tag_count,
@@ -391,6 +462,7 @@ class GfRepository:
         if scope_ids:
             where += " AND scope_id = ANY(CAST(:scope_ids AS uuid[]))"
             params["scope_ids"] = [str(s) for s in scope_ids]
+        where += self._root_clause(db, scope_ids, program_ids, params)
         rows = db.execute(
             text(f"""
                 SELECT DISTINCT host FROM (
