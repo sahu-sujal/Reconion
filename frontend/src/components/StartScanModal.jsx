@@ -61,6 +61,13 @@ const STAGES = [
     Icon: SearchIcon,
     step: '★',
   },
+  {
+    type: 'GF',
+    label: 'GF intelligence',
+    desc: 'Tag every discovered URL & endpoint with the gf categories it matches (sqli, xss, lfi, redirect, ssrf, idor…). Standalone, no network — safe to re-run. Populates the GF Intelligence page. Does not chain.',
+    Icon: SearchIcon,
+    step: '★',
+  },
 ]
 
 export default function StartScanModal({ target, busy, activeScan, onStart, onClose }) {
